@@ -36,6 +36,9 @@ def evaluate(session, claims):
         status, proof = 'NO_EVIDENCE', ('Nema dovoljnog prethodnog dokaza.',)
         if claim.type == 'tests_pass':
             test_calls = [e for e in preceding if e.kind == 'tool_call' and e.turn == claim.event.turn and runner(e.text)]
+            scopes = re.findall(r'(?i)\b(?:backend|frontend)\b', claim.quote)
+            if scopes:
+                test_calls = [e for e in test_calls if all(re.search(r'(?i)\b' + scope + r'\b', e.text) for scope in scopes)]
             if test_calls:
                 call = test_calls[-1]
                 result = next((e for e in reversed(results) if e.tool_id == call.tool_id and e.turn == claim.event.turn), None)

@@ -7,11 +7,11 @@ if exist "%~dp0.venv\Scripts\python.exe" (
   set "RECEIPTS_PYTHON=%~dp0.venv\Scripts\python.exe"
   goto explicit
 )
-echo Python okruzenje nedostaje. Pokrenite setup.cmd ili postavite RECEIPTS_PYTHON.
+echo Python okruzenje nedostaje. Pokrenite setup.cmd ili postavite RECEIPTS_PYTHON. 1>&2
 exit /b 2
 :explicit
 if not exist "%RECEIPTS_PYTHON%" (
-  echo Python interpreter nije pronadjen: provjerite RECEIPTS_PYTHON.
+  echo Python interpreter nije pronadjen: provjerite RECEIPTS_PYTHON. 1>&2
   exit /b 2
 )
 "%RECEIPTS_PYTHON%" -m receipts.cli %*

@@ -51,3 +51,11 @@ class CoreTests(unittest.TestCase):
                              env=env, capture_output=True, text=True, timeout=10)
         self.assertNotEqual(run.returncode, 0)
         self.assertIn('Python', run.stdout + run.stderr)
+
+    def test_hook_missing_interpreter_has_no_plain_stdout(self):
+        root=Path(__file__).resolve().parents[1]
+        env=dict(os.environ,RECEIPTS_PYTHON='Z:\\missing\\python.exe')
+        result=subprocess.run(['cmd','/d','/c',str(root/'receipts-hook.cmd'),'--source','codex'],
+            env=env,capture_output=True,text=True,timeout=10)
+        self.assertEqual(result.returncode,0)
+        self.assertEqual(result.stdout,'')

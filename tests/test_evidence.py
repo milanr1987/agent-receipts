@@ -66,6 +66,14 @@ class EvidenceTests(unittest.TestCase):
                   event('assistant_text', 'All tests pass', 5)]
         self.assertEqual(evaluate(Session('codex','s',tuple(events)),extract_claims(events))[0].status, 'CONTRADICTED')
 
+    def test_frontend_pass_does_not_override_explicit_backend_failure(self):
+        events=[event('tool_call','pytest backend',1,tool_id='a'),
+                event('tool_result','1 failed',2,tool_id='a',exit_code=1,status='completed'),
+                event('tool_call','npm test -- frontend',3,tool_id='b'),
+                event('tool_result','2 passed',4,tool_id='b',exit_code=0,status='completed'),
+                event('assistant_text','Backend tests pass',5)]
+        self.assertEqual(evaluate(Session('codex','s',tuple(events)),extract_claims(events))[0].status,'CONTRADICTED')
+
     def test_test_count_and_skips(self):
         self.assertEqual(verdict('python -m unittest', 'Ran 2 tests\nOK', 'All 14 tests pass').status, 'CONTRADICTED')
         self.assertEqual(verdict('python -m unittest', 'Ran 2 tests\nOK (skipped=1)',
