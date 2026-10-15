@@ -12,7 +12,7 @@ Testguard findings require human review and can include legitimate refactors.
 
 Install Python **3.12 or newer** with the standard `venv` module. Install Git if you
 want `check-diff`. Download this repository as ZIP and extract it, or clone its
-actual repository URL when published. The repository has not been published yet.
+repository URL: https://github.com/milanr1987/agent-receipts.git.
 Do not copy another computer's `.venv`, sessions, credentials or reports.
 
 Open a terminal in the extracted folder:
