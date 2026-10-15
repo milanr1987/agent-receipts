@@ -1,0 +1,4 @@
+{"type": "user", "sessionId": "fixture-claude", "cwd": "/example/project", "message": {"content": "Run tests"}}
+{"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Bash", "id": "bash1", "input": {"command": "pytest -q"}}]}}
+{"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "bash1", "is_error": false, "content": "2 passed\nExit code 0"}]}}
+{"type": "assistant", "message": {"content": [{"type": "text", "text": "All tests pass."}]}}
