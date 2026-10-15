@@ -7,6 +7,7 @@ def redact(text: str) -> str:
                   '[PRIVATE KEY REDACTED]', str(text), flags=re.S)
     text = re.sub(r'(?i)(?:sk-|gh[pousr]_|github_pat_|xox[baprs]-)[\w-]{8,}', '[TOKEN]', text)
     text = re.sub(r'\b\d{6,12}:[A-Za-z0-9_-]{25,}\b', '[TOKEN]', text)
+    text = re.sub(r'(?i)\bBearer\s+[\w.~-]+', 'Bearer [REDACTED]', text)
     text = re.sub(r'(?i)(["\']?(?:[\w-]*(?:token|password|secret)|api[_-]?key|authorization)["\']?\s*[:=]\s*)'
                   r'(?:"[^"\n]*"|\'[^\'\n]*\'|[^\s,;}]+)', r'\1[REDACTED]', text)
     text = re.sub(r'(?i)\bBearer\s+[\w.~-]+', 'Bearer [REDACTED]', text)

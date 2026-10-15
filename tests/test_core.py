@@ -25,6 +25,11 @@ class CoreTests(unittest.TestCase):
     def test_preserves_command_structure(self):
         self.assertEqual(redact('python -m unittest -v; Exit code 1'), 'python -m unittest -v; Exit code 1')
 
+    def test_authorization_bearer_does_not_leak_credential(self):
+        result = redact('Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.secret.signature')
+        self.assertNotIn('eyJhbGci', result)
+        self.assertNotIn('secret.signature', result)
+
     def test_event_immutable(self):
         event = Event('codex', 's', '.', 1, 't', 'assistant_text', 'hello')
         with self.assertRaises(dataclasses.FrozenInstanceError):
