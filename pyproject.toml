@@ -4,9 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-receipts"
-version = "0.2.0"
+version = "0.3.0"
 description = "Offline completion evidence auditing for Codex CLI and Claude Code"
 readme = "README.md"
+license = "MIT"
 requires-python = ">=3.12"
 dependencies = []
 

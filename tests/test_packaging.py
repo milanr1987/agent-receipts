@@ -22,10 +22,15 @@ class PackagingTests(unittest.TestCase):
     def test_pyproject_matches_version_and_entrypoint(self):
         data = tomllib.loads((ROOT / 'pyproject.toml').read_text(encoding='utf-8'))
         self.assertEqual(data['project']['version'], receipts.__version__)
-        self.assertEqual(data['project']['version'], '0.2.0')
+        self.assertEqual(data['project']['version'], '0.3.0')
         self.assertEqual(data['project']['scripts']['receipts'], 'receipts.cli:main')
         self.assertEqual(data['project']['dependencies'], [])
         self.assertEqual(data['build-system']['build-backend'], 'setuptools.build_meta')
+
+    def test_mit_license_declared(self):
+        data = tomllib.loads((ROOT / 'pyproject.toml').read_text(encoding='utf-8'))
+        self.assertEqual(data['project']['license'], 'MIT')
+        self.assertIn('MIT License', (ROOT / 'LICENSE').read_text(encoding='utf-8'))
 
     def test_shell_scripts_use_lf(self):
         for name in ('setup.sh', 'receipts.sh', 'receipts-hook.sh'):
