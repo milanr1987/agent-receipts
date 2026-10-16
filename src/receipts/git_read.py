@@ -45,8 +45,10 @@ def repo_root(root):
     return root
 
 
-def changed_versions(root, base='HEAD', include=None):
-    root = repo_root(root)
+def changed_versions(root, base='HEAD', include=None, paths=None, resolved=False):
+    """paths: repo-relative files to list (literal pathspecs); resolved: root is already the repo top level."""
+    root = Path(root) if resolved else repo_root(root)
+    spec = ['--'] + [':(literal)' + p for p in paths] if paths else ['--']
     if not re.fullmatch(r'(?:HEAD(?:[~^]\d*)?|[A-Za-z0-9][A-Za-z0-9_./-]*)', base) or '..' in base:
         raise ValueError(t('git_bad_base'))
     check = run_git(root, ['rev-parse', '--verify', base + '^{commit}'])
@@ -54,9 +56,9 @@ def changed_versions(root, base='HEAD', include=None):
         raise ValueError(t('git_no_base'))
     # Pin the validated commit so a ref cannot move between subsequent reads.
     revision = check.stdout.strip()
-    listed = run_git(root, ['diff', '--no-ext-diff', '--no-textconv', '--no-renames', '--cached', '--name-only', '-z', revision, '--'])
-    unstaged = run_git(root, ['diff', '--no-ext-diff', '--no-textconv', '--no-renames', '--name-only', '-z', '--'])
-    untracked = run_git(root, ['ls-files', '--others', '--exclude-standard', '-z'])
+    listed = run_git(root, ['diff', '--no-ext-diff', '--no-textconv', '--no-renames', '--cached', '--name-only', '-z', revision, *spec])
+    unstaged = run_git(root, ['diff', '--no-ext-diff', '--no-textconv', '--no-renames', '--name-only', '-z', *spec])
+    untracked = run_git(root, ['ls-files', '--others', '--exclude-standard', '-z', *spec])
     if listed.returncode or untracked.returncode or unstaged.returncode:
         raise ValueError(t('git_diff_unavailable'))
     paths = sorted(set((listed.stdout + unstaged.stdout + untracked.stdout).split('\0')) - {''})

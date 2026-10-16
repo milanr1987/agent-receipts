@@ -47,6 +47,20 @@ def _was_touched(rel, top, touched):
     return _norm(os.path.join(str(top), rel)) in touched
 
 
+def weakening_findings(project, touched):
+    """Test-weakening findings for files the agent touched; Git is asked only about those paths."""
+    from .git_read import changed_versions, repo_root
+    from .testguard import compare_versions
+    top = repo_root(project)
+    prefix = _norm(str(top)).rstrip('/') + '/'
+    rels = sorted(p[len(prefix):] for p in touched if p.startswith(prefix))
+    if not rels:
+        return []
+    return [f for version in changed_versions(top, include=lambda rel: _was_touched(rel, top, touched),
+                                              paths=rels, resolved=True)
+            for f in compare_versions(version.path, version.old, version.new)]
+
+
 def _tail_read(source, path):
     """Tail rows; Codex keeps its session_meta head row (identity, cwd) in front, renumbered rows follow."""
     rows, diagnostics = read_rows(path, tail_bytes=HOOK_TAIL_BYTES)
@@ -112,11 +126,7 @@ def handle_hook(source, payload):
         touched = touched_paths(events, cwd)
         if touched and project.is_dir():
             try:
-                from .git_read import changed_versions, repo_root
-                from .testguard import compare_versions
-                top = repo_root(project)
-                findings = [f for version in changed_versions(project, include=lambda rel: _was_touched(rel, top, touched))
-                            for f in compare_versions(version.path, version.old, version.new)]
+                findings = weakening_findings(project, touched)
                 if findings:
                     warnings.append(t('hook_weakening', n=len(findings)))
             except ValueError:

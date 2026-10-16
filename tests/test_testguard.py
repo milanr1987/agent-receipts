@@ -84,6 +84,47 @@ class GitTests(unittest.TestCase):
             self.assertEqual({v.path for v in versions},{'test_b.py'})
             self.assertTrue(shows and all(s.endswith(':test_b.py') for s in shows),shows)
 
+    def test_hook_limits_git_listing_to_touched_paths(self):
+        import receipts.git_read as git_read
+        from receipts import hook
+        with tempfile.TemporaryDirectory() as d:
+            root,p=self.make_repo(d)
+            for n in ('test_a.py','test_b.py'):
+                (root/n).write_text('def test_x():\n assert 1\n assert 2\n')
+            subprocess.run([self.git,'-C',str(root),'add','.'],capture_output=True)
+            subprocess.run([self.git,'-C',str(root),'commit','-m','more'],capture_output=True)
+            for n in ('test_a.py','test_b.py'):
+                (root/n).write_text('def test_x():\n assert 1\n')
+            calls=[]
+            real=git_read.run_git
+            def spy(r,args,*a,**k):
+                calls.append(list(args))
+                return real(r,args,*a,**k)
+            touched={hook._norm(str(root/'test_b.py'))}
+            with patch.object(git_read,'run_git',spy):
+                findings=hook.weakening_findings(root,touched)
+            self.assertTrue(findings)
+            self.assertEqual(sum(1 for c in calls if c[:2]==['rev-parse','--show-toplevel']),1,calls)
+            listing=[c for c in calls if c[0]=='ls-files' or (c[0]=='diff' and '--name-only' in c)]
+            self.assertEqual(len(listing),3)
+            for c in listing:
+                self.assertEqual(c[c.index('--')+1:],[':(literal)test_b.py'],c)
+
+    def test_hook_skips_git_when_no_touched_path_inside_repo(self):
+        import receipts.git_read as git_read
+        from receipts import hook
+        with tempfile.TemporaryDirectory() as d, tempfile.TemporaryDirectory() as other:
+            root,p=self.make_repo(d)
+            calls=[]
+            real=git_read.run_git
+            def spy(r,args,*a,**k):
+                calls.append(list(args))
+                return real(r,args,*a,**k)
+            with patch.object(git_read,'run_git',spy):
+                findings=hook.weakening_findings(root,{hook._norm(str(Path(other)/'test_z.py'))})
+            self.assertEqual(findings,[])
+            self.assertFalse([c for c in calls if c[0] in ('diff','ls-files')])
+
     def test_staged_unstaged_and_index_unchanged(self):
         with tempfile.TemporaryDirectory() as d:
             root,p=self.make_repo(d)
