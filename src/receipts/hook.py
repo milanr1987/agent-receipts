@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 from .claims import extract_claims, runner
 from .ingest import codex, claude
+from .ingest.common import read_rows
 from .ingest.detect import detect
 from .models import Event
 from .messages import t
@@ -25,6 +26,47 @@ def _log(message):
         pass
 
 
+HOOK_TAIL_BYTES = 8 * 1024 * 1024
+EDIT_TOOLS = ('Write', 'Edit', 'MultiEdit', 'file_change')
+
+
+def _norm(path):
+    return os.path.normcase(os.path.abspath(path)).replace('\\', '/')
+
+
+def touched_paths(events, cwd):
+    paths = set()
+    for e in events:
+        if e.tool_name in EDIT_TOOLS:
+            for p in e.files:
+                paths.add(_norm(p if os.path.isabs(p) else os.path.join(cwd, p)))
+    return paths
+
+
+def _was_touched(rel, touched):
+    rel = os.path.normcase(rel).replace('\\', '/')
+    return any(p == rel or p.endswith('/' + rel) for p in touched)
+
+
+def _load(source, path, identity):
+    """Parse only the tail when it holds the whole current turn; otherwise the full file."""
+    parser = codex if source == 'codex' else claude
+    try:
+        read = read_rows(path, tail_bytes=HOOK_TAIL_BYTES)
+        if detect(path, read) == source:
+            session = parser.parse(path, read)
+            if session.events and session.session_id == identity:
+                last = session.events[-1].turn
+                if any(e.kind == 'user_text' and e.turn == last for e in session.events):
+                    return session
+    except ValueError:
+        pass  # tail without recognizable rows: use the full read below
+    read = read_rows(path)
+    if detect(path, read) != source:
+        raise ValueError('source_mismatch')
+    return parser.parse(path, read)
+
+
 def handle_hook(source, payload):
     if payload.get('stop_hook_active') is True:
         return None
@@ -34,9 +76,7 @@ def handle_hook(source, payload):
         if not isinstance(transcript, str) or not isinstance(identity, str) or not isinstance(cwd, str):
             raise ValueError('missing_identity')
         path = Path(transcript).expanduser()
-        if detect(path) != source:
-            raise ValueError('source_mismatch')
-        session = (codex if source == 'codex' else claude).parse(path)
+        session = _load(source, path, identity)
         if session.session_id != identity or not session.events:
             raise ValueError('session_mismatch')
         normalize = lambda s: os.path.normcase(os.path.abspath(s))
@@ -58,12 +98,13 @@ def handle_hook(source, payload):
             if not any(e.kind == 'tool_call' and runner(e.text) for e in events):
                 warnings.append(t('hook_no_runner'))
         project = Path(cwd)
-        if project.is_dir():
+        touched = touched_paths(events, cwd)
+        if touched and project.is_dir():
             try:
                 from .git_read import changed_versions
                 from .testguard import compare_versions
-                findings = [f for version in changed_versions(project) for f in
-                            compare_versions(version.path,version.old,version.new)]
+                findings = [f for version in changed_versions(project) if _was_touched(version.path, touched)
+                            for f in compare_versions(version.path, version.old, version.new)]
                 if findings:
                     warnings.append(t('hook_weakening', n=len(findings)))
             except ValueError:

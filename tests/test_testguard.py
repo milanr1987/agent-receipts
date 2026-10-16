@@ -107,3 +107,19 @@ class GitTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             with self.assertRaisesRegex(ValueError,'timed out'),patch.dict(os.environ,{'RECEIPTS_LANG':''}):
                 run_git(Path(d),['rev-parse','HEAD'],timeout=0)
+
+
+class SubdirTests(unittest.TestCase):
+    def test_changed_versions_from_subdirectory(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            git = lambda *a: subprocess.run(['git', '-C', str(root), *a], check=True, capture_output=True)
+            git('init', '-q'); git('config', 'user.email', 'a@b.c'); git('config', 'user.name', 'a')
+            (root / 'tests').mkdir(); (root / 'sub').mkdir()
+            (root / 'tests/test_a.py').write_text('def test_x():\n assert 1\n assert 2\n', encoding='utf-8')
+            (root / 'sub/keep.txt').write_text('x', encoding='utf-8')
+            git('add', '.'); git('commit', '-qm', 'init')
+            (root / 'tests/test_a.py').write_text('def test_x():\n assert 1\n', encoding='utf-8')
+            versions = changed_versions(root / 'sub')
+            self.assertEqual([v.path for v in versions], ['tests/test_a.py'])
+            self.assertIn('assert 2', versions[0].old)

@@ -38,6 +38,10 @@ def run_git(root, args, timeout=5.0):
 
 def changed_versions(root, base='HEAD'):
     root = Path(root).resolve()
+    top = run_git(root, ['rev-parse', '--show-toplevel'])
+    if top.returncode == 0 and top.stdout.strip():
+        # Git reports paths relative to the repository top level, not to the current directory.
+        root = Path(top.stdout.strip()).resolve()
     if not re.fullmatch(r'(?:HEAD(?:[~^]\d*)?|[A-Za-z0-9][A-Za-z0-9_./-]*)', base) or '..' in base:
         raise ValueError(t('git_bad_base'))
     check = run_git(root, ['rev-parse', '--verify', base + '^{commit}'])
