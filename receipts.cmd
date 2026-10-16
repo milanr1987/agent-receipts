@@ -14,5 +14,6 @@ if not exist "%RECEIPTS_PYTHON%" (
   echo Python interpreter not found: check RECEIPTS_PYTHON. 1>&2
   exit /b 2
 )
-"%RECEIPTS_PYTHON%" -m receipts.cli %*
+rem -P keeps modules in the caller's directory off sys.path (hooks run inside user projects).
+"%RECEIPTS_PYTHON%" -P -m receipts.cli %*
 exit /b %errorlevel%

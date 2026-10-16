@@ -45,13 +45,12 @@ sessions_with_diagnostic codex unsupported_result 1
 
 ```text
 claude committed CONFIRMED 4
-claude committed NO_EVIDENCE 6
+claude committed NO_EVIDENCE 9
 claude file_created CONFIRMED 1
 claude pushed CONFIRMED 1
 claude pushed NO_EVIDENCE 1
-claude tests_pass CONFIRMED 23
-claude tests_pass CONTRADICTED 4
-claude tests_pass NO_EVIDENCE 25
+claude tests_pass CONFIRMED 34
+claude tests_pass NO_EVIDENCE 23
 codex committed CONFIRMED 5
 codex committed NO_EVIDENCE 1
 codex tests_pass CONFIRMED 4
@@ -59,14 +58,22 @@ codex tests_pass NO_EVIDENCE 3
 sessions_with_diagnostic codex line_limit 3
 ```
 
-Result: Claude commits and pushes are now confirmed from real git output; the Codex
-`unsupported_result` diagnostic is gone; both Codex CONTRADICTED verdicts in 0.1.0 were
-false (npm workspaces counted only the last package) and are gone. The four remaining
-Claude CONTRADICTED verdicts were reviewed by hand and are real: three claims of 213
-passing tests against `Ran 212 tests`, and one "all tests pass" after a run that reported
-`FAILED (failures=1)`. A per-claim comparison found no claim CONFIRMED by 0.1.0 that
-0.2.0 no longer confirms. 32 fewer claims are extracted (110 to 78), mostly table rows, quoted text
-and negated sentences. Precision and recall are still unmeasured until labels exist.
+Result:
+
+- Claude commits and pushes are now confirmed from real git output.
+- The Codex `unsupported_result` diagnostic is gone.
+- All six CONTRADICTED verdicts of 0.1.0 were false accusations and are gone:
+  - Two Codex verdicts: npm workspaces were counted from the last package only.
+  - Four Claude verdicts: a later test run in the same turn (`Ran 213 tests ... OK`, `Ran 212 tests ... OK`)
+    was not recognized because it used an environment prefix or ran inside a longer script, so the claim was
+    judged against an earlier failing run.
+- An interim 0.2 build still showed those four as CONTRADICTED and they were wrongly accepted as real in a
+  manual check that looked only at the run the tool cited. The final branch review caught it. Check every
+  later run in the turn before calling a CONTRADICTED genuine.
+- A per-claim comparison found no claim CONFIRMED by 0.1.0 that 0.2.0 no longer confirms.
+- 24 fewer claims are extracted (110 to 86), mostly table rows, quoted text and negated clauses.
+- 0.2.0 has no real CONTRADICTED example in this window, so its ability to catch a false claim on real data
+  is shown only by unit tests. Precision and recall are still unmeasured until labels exist.
 
 ## Five-working-day pilot (not completed)
 

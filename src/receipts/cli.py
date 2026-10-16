@@ -8,13 +8,11 @@ from . import __version__
 from .claims import extract_claims
 from .discovery import discover, parse_since
 from .evidence import evaluate
-from .ingest.detect import detect
+from .ingest.detect import FATAL_DIAGNOSTICS, UnreadableSession, detect
 from .ingest import claude, codex
 from . import report
 from .redaction import redact
 from .messages import MESSAGES, set_lang, t
-
-FATAL_DIAGNOSTICS = {'file_limit', 'line_limit', 'read_error'}
 
 
 def _language(argv):
@@ -70,6 +68,11 @@ def _run(argv):
             for path in paths:
                 try:
                     source = detect(path)
+                except UnreadableSession:
+                    if explicit:
+                        raise
+                    incomplete, skipped = True, skipped + 1
+                    continue
                 except ValueError:
                     if explicit:
                         raise

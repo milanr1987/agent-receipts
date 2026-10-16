@@ -10,7 +10,7 @@ PATTERNS = {
     'file_created': r'\b(?:created|napravio sam fajl|kreirao sam fajl)\s+[`"\x27]?([\w./\\-]+\.[\w]+)',
 }
 EXCLUDE = re.compile(r'(?i)\b(?:will|would|should|must|need to|make sure|if|claims?|asserts?|nije|nisu|not|never|bez dokaza'
-                     r'|going to|once|until|goal|ću|ćeš|će|ćemo|ćete|treba|trebalo|ako|kad|kada|cilj je|da bi'
+                     r'|going to|until|goal|ću|ćeš|će|ćemo|ćete|treba|trebalo|ako|kad|kada|cilj je|da bi'
                      r'|nothing|none|ništa|(?:did|does|do|is|are|was|were|has|have|had)n[\'’]t)\b')
 PATH_TOKEN = re.compile(r'[\w./\\-]+\.\w+')
 
@@ -31,16 +31,22 @@ def extract_claims(events):
             continue
         for sentence in re.split(r'[\n!?;]+|(?<=[a-z0-9)])\.\s+(?=[A-ZČĆŠŽĐ])', strip_non_claims(event.text)):
             clean = sentence.replace('**', '').strip()
-            if EXCLUDE.search(clean) or re.search(r'["“].*?(?:tests|testovi).*?["”]', clean, re.I):
+            if re.search(r'["“].*?(?:tests|testovi).*?["”]', clean, re.I):
                 continue
-            for typ, pattern in PATTERNS.items():
-                match = re.search(pattern, clean, re.I)
-                if not match:
+            seen = set()
+            # Negation/intent words only govern their own clause: "All tests pass, none skipped" is a claim.
+            for clause in re.split(r',\s+', clean):
+                if EXCLUDE.search(clause):
                     continue
-                if typ == 'committed' and re.search(r'committed\s+(?:cleanup|diff)', clean, re.I):
-                    continue
-                value = match[1] if match.lastindex else None
-                found.append(Claim(typ, event, clean[:200], value))
+                for typ, pattern in PATTERNS.items():
+                    match = re.search(pattern, clause, re.I)
+                    if not match or typ in seen:
+                        continue
+                    if typ == 'committed' and re.search(r'committed\s+(?:cleanup|diff)', clause, re.I):
+                        continue
+                    seen.add(typ)
+                    value = match[1] if match.lastindex else None
+                    found.append(Claim(typ, event, clean[:200], value))
     return tuple(found)
 
 
@@ -61,7 +67,8 @@ def runner(command):
     for segment in command_segments(command):
         if re.search(r'(?i)(?:^|\s)(?:--(?:help|version|collect-only|co|listTests|list-tests|dry-run|showConfig)|-h|-V|-list)(?:\s|$|=)', segment):
             continue
-        prefix = r'(?i)^(?:"?[^\s"]*[\\/])?'
+        # Optional VAR=value prefixes and uv/poetry/pipenv wrappers, then an optional executable path.
+        prefix = r'(?i)^(?:\w+=\S*\s+)*(?:(?:uv|poetry|pipenv)\s+run\s+)?(?:"?[^\s"]*[\\/])?'
         checks = [
             ('unittest', prefix + r'python(?:\d+(?:\.\d+)*)?(?:\.exe)?"?\s+-m\s+unittest\b'),
             ('pytest', prefix + r'(?:pytest(?:\.exe)?\b|python(?:\d+(?:\.\d+)*)?(?:\.exe)?"?\s+-m\s+pytest\b)'),

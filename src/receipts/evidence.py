@@ -52,35 +52,34 @@ def runner_summary(name, text):
     return matches[-1].group(0) if matches else None
 
 
-def test_count(name, text):
+def test_counts(name, text):
+    """Every test count the runner printed, in order (one per run or npm workspace)."""
     if name == 'unittest':
         found = re.findall(r'\bRan\s+(\d+)\s+tests?\b', text)
     elif name in ('vitest', 'jest', 'npm'):
-        # npm workspaces print one "Tests" line per package; the claim counts all of them.
         found = JS_TESTS_RE.findall(text)
-        return sum(int(n) for n in found) if found else None
     elif name == 'pytest':
         found = re.findall(r'\b(\d+)\s+passed\b', text)
     else:
         found = []
-    return int(found[-1]) if found else None
+    return [int(n) for n in found]
 
 
 def _commit_proven(command, output):
-    """Commit summary line, or for `commit -q` a following `git log --oneline` line with the same subject."""
+    """Commit summary line, or for `commit -q` the newest `git log --oneline` line carrying the same subject."""
     if re.search(r'\[[^\]\n]+\s+[0-9a-f]{7,40}\]', output):
         return True
-    message = re.search(r'''\bcommit\b[^\n]*?\s-[a-zA-Z]*m\s*(["'])([^"'\n$]+)''', command)
-    if not message:
-        return False
-    subject = message[2].strip()[:60]
-    return bool(subject) and bool(re.search(r'(?m)^[0-9a-f]{7,40} ' + re.escape(subject), output))
+    messages = list(re.finditer(r'''\bcommit\b[^\n]*?\s-[a-zA-Z]*m\s*(["'])([^"'\n$]+)''', command))
+    newest = re.search(r'(?m)^[0-9a-f]{7,40} (.*?)\s*$', output)
+    # A failed commit leaves an older HEAD on top, so only an exact subject match on that line counts.
+    return bool(messages and newest) and newest[1] == messages[-1][2].strip()
 
 
 def _check_counts(claim, name, text):
     requested = re.search(r'(?i)\b(\d+)\s+(?:tests?|testova|testa|testovi)\b', claim.quote)
-    actual = test_count(name, text)
-    if requested and actual is not None and actual != int(requested[1]):
+    counts = test_counts(name, text)
+    # Several runs or workspaces: the claim may name the last run or the total.
+    if requested and counts and int(requested[1]) not in (counts[-1], sum(counts)):
         return 'CONTRADICTED'
     skipped = re.search(r'(?i)skipped[=: ]+(\d+)', text)
     if skipped and int(skipped[1]) and re.search(r'(?i)without skips|no skips|bez preskakanja', claim.quote):
