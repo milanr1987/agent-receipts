@@ -100,6 +100,41 @@ class IntegrationTests(unittest.TestCase):
             text=''.join(p.read_text(encoding='utf-8') for p in (home/'r').glob('*.md'))
             self.assertIn('Skipped 1 files',text)
 
+    def test_json_output_valid_and_redacted(self):
+        from receipts import report
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);path=root/'s.jsonl'
+            fixture(path,secret=' api_key=sentinel-secret "quoted" hello@example.org')
+            with patch.object(report,'REPORTS_DIR',root/'r'),redirect_stdout(io.StringIO()) as out,redirect_stderr(io.StringIO()):
+                code=main(['audit',str(path),'--format','json'])
+            data=json.loads(out.getvalue())
+            self.assertEqual(code,0)
+            self.assertEqual(data['schema_version'],1)
+            self.assertEqual(data['summary']['codex']['CONFIRMED'],1)
+            self.assertEqual(data['sessions'][0]['verdicts'][0]['status'],'CONFIRMED')
+            self.assertFalse(data['sessions'][0]['subagent'])
+            for secret in ['sentinel-secret','hello@example.org']:
+                self.assertNotIn(secret,out.getvalue())
+            self.assertTrue(list((root/'r').glob('*.json')))
+
+    def test_report_dir_order(self):
+        from receipts import report
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            self.assertEqual(report.reports_dir(out=root/'x'),root/'x')
+            with patch.object(report,'REPORTS_DIR',None):
+                self.assertEqual(report.reports_dir(env={'RECEIPTS_HOME':str(root)}),root/'reports')
+                with patch.object(report,'_checkout_root',return_value=None):
+                    key='LOCALAPPDATA' if os.name=='nt' else 'XDG_STATE_HOME'
+                    self.assertEqual(report.reports_dir(env={key:str(root)}),root/'agent-receipts'/'reports')
+                self.assertEqual(report.reports_dir(env={}),Path(__file__).resolve().parents[1]/'reports')
+
+    def test_subagent_label(self):
+        from receipts.models import Event,Claim,Verdict,Session
+        event=Event('claude','s','.',1,'1','assistant_text','All tests pass')
+        text=render_report([(Session('claude','s',(event,),subagent=True),(Verdict(Claim('tests_pass',event,event.text),'NO_EVIDENCE',()),))])
+        self.assertIn('(subagent)',text)
+
     def test_malformed_not_clean(self):
         with tempfile.TemporaryDirectory() as d:
             p=Path(d)/'bad.jsonl';p.write_text('not json')

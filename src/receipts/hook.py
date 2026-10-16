@@ -14,10 +14,11 @@ from .redaction import redact
 
 def _log(message):
     try:
-        report.REPORTS_DIR.mkdir(parents=True, exist_ok=True)
-        path = report.REPORTS_DIR / 'hook.log'
+        directory = report.reports_dir()
+        directory.mkdir(parents=True, exist_ok=True)
+        path = directory / 'hook.log'
         if path.exists() and path.stat().st_size >= 5 * 1024 * 1024:
-            path.replace(report.REPORTS_DIR / 'hook.previous.log')
+            path.replace(directory / 'hook.previous.log')
         with path.open('a', encoding='utf-8') as stream:
             stream.write(redact(message)[:10000] + '\n')
     except OSError:

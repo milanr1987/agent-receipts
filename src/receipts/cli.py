@@ -1,5 +1,6 @@
 import argparse
 from dataclasses import asdict, replace
+from datetime import date
 import json
 from pathlib import Path
 import sys
@@ -48,11 +49,15 @@ def _run(argv):
     audit.add_argument('--profile')
     audit.add_argument('--project', type=Path)
     audit.add_argument('--include-subagents', action='store_true')
+    audit.add_argument('--format', choices=['md', 'json'], default='md')
+    audit.add_argument('--out', type=Path)
     diff = commands.add_parser('check-diff', help=t('help_diff'), parents=[lang_opt])
     diff.add_argument('--project', type=Path, default=Path.cwd())
     diff.add_argument('--base', default='HEAD')
+    diff.add_argument('--out', type=Path)
     evaluation = commands.add_parser('eval', help=t('help_eval'), parents=[lang_opt])
     evaluation.add_argument('labels', type=Path)
+    evaluation.add_argument('--out', type=Path)
     hook = commands.add_parser('hook', help=t('help_hook'), parents=[lang_opt])
     hook.add_argument('--source', required=True, choices=['codex','claude'])
     args = parser.parse_args(argv)
@@ -77,8 +82,14 @@ def _run(argv):
                     session = replace(session, subagent=True)
                 incomplete |= any(d.code in FATAL_DIAGNOSTICS for d in session.diagnostics)
                 results.append((session,evaluate(session,extract_claims(session.events))))
-            output = report.save_report(report.render_report(results, skipped))
-            print(redact(t('report_saved', path=output, n=len(results))))
+            if args.format == 'json':
+                text = report.render_json(results, skipped)
+                output = report.save_report(text, date.today().isoformat() + '.json', args.out, already_redacted=True)
+                print(text)
+                print(redact(t('report_saved', path=output, n=len(results))), file=sys.stderr)
+            else:
+                output = report.save_report(report.render_report(results, skipped), out=args.out)
+                print(redact(t('report_saved', path=output, n=len(results))))
             if incomplete or not results:
                 return 2
             return int(any(v.status != 'CONFIRMED' for _, verdicts in results for v in verdicts))
@@ -88,13 +99,13 @@ def _run(argv):
             findings = [asdict(f) for version in changed_versions(args.project,args.base)
                         for f in compare_versions(version.path,version.old,version.new)]
             text = redact(json.dumps(findings,ensure_ascii=False,indent=2))
-            report.save_report(text,'testguard.json')
+            report.save_report(text,'testguard.json',args.out)
             print(text)
             return int(bool(findings))
         if args.action == 'eval':
             from .evaluation import evaluate_labels
             text = redact(json.dumps(evaluate_labels(args.labels),ensure_ascii=False,indent=2))
-            report.save_report(text,'eval.json')
+            report.save_report(text,'eval.json',args.out)
             print(text)
             return 0
         if args.action == 'hook':
