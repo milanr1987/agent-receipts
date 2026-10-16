@@ -123,3 +123,5 @@ class SubdirTests(unittest.TestCase):
             versions = changed_versions(root / 'sub')
             self.assertEqual([v.path for v in versions], ['tests/test_a.py'])
             self.assertIn('assert 2', versions[0].old)
+            self.assertIn('assert 1', versions[0].new)
+            self.assertNotIn('assert 2', versions[0].new)

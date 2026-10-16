@@ -31,7 +31,7 @@ EDIT_TOOLS = ('Write', 'Edit', 'MultiEdit', 'file_change')
 
 
 def _norm(path):
-    return os.path.normcase(os.path.abspath(path)).replace('\\', '/')
+    return os.path.normcase(os.path.realpath(path)).replace('\\', '/')
 
 
 def touched_paths(events, cwd):
@@ -43,16 +43,27 @@ def touched_paths(events, cwd):
     return paths
 
 
-def _was_touched(rel, touched):
-    rel = os.path.normcase(rel).replace('\\', '/')
-    return any(p == rel or p.endswith('/' + rel) for p in touched)
+def _was_touched(rel, top, touched):
+    return _norm(os.path.join(str(top), rel)) in touched
+
+
+def _tail_read(source, path):
+    """Tail rows; Codex keeps its session_meta head row (identity, cwd) in front, renumbered rows follow."""
+    rows, diagnostics = read_rows(path, tail_bytes=HOOK_TAIL_BYTES)
+    if source == 'codex' and path.stat().st_size > HOOK_TAIL_BYTES:
+        head, _ = read_rows(path, max_rows=5)
+        head = [(n, r) for n, r in head if r.get('type') == 'session_meta'][:1]
+        if head:
+            offset = head[0][0]
+            rows = head + [(n + offset, r) for n, r in rows]
+    return rows, diagnostics
 
 
 def _load(source, path, identity):
     """Parse only the tail when it holds the whole current turn; otherwise the full file."""
     parser = codex if source == 'codex' else claude
     try:
-        read = read_rows(path, tail_bytes=HOOK_TAIL_BYTES)
+        read = _tail_read(source, path)
         if detect(path, read) == source:
             session = parser.parse(path, read)
             if session.events and session.session_id == identity:
@@ -101,9 +112,10 @@ def handle_hook(source, payload):
         touched = touched_paths(events, cwd)
         if touched and project.is_dir():
             try:
-                from .git_read import changed_versions
+                from .git_read import changed_versions, repo_root
                 from .testguard import compare_versions
-                findings = [f for version in changed_versions(project) if _was_touched(version.path, touched)
+                top = repo_root(project)
+                findings = [f for version in changed_versions(project) if _was_touched(version.path, top, touched)
                             for f in compare_versions(version.path, version.old, version.new)]
                 if findings:
                     warnings.append(t('hook_weakening', n=len(findings)))

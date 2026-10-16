@@ -107,11 +107,74 @@ class TouchedFilesHookTests(unittest.TestCase):
             edited = str(Path(d) / 'tests' / 'TEST_B.py').upper()
             self.assertIn('signals: 1', self.run_hook_on(d, edited))
 
-    def test_hook_tail_window_and_fallback(self):
-        from receipts import hook
-        with tempfile.TemporaryDirectory() as d, patch.object(hook, 'HOOK_TAIL_BYTES', 600):
-            # Old turn is large, current turn fits in the window.
-            self.assertIn('signals: 1', self.run_hook_on(d, str(Path(d) / 'tests' / 'test_b.py'), padding=5000))
-        with tempfile.TemporaryDirectory() as d, patch.object(hook, 'HOOK_TAIL_BYTES', 50):
-            # Window too small to contain the turn start: falls back to the full read.
-            self.assertIn('signals: 1', self.run_hook_on(d, str(Path(d) / 'tests' / 'test_b.py'), padding=5000))
+    def spy_hook(self, d, edited, padding=0, window=None, cwd_sub=None):
+        from receipts import hook, report
+        root = git_repo_with_two_weakened_tests(d)
+        transcript = Path(d) / 't.jsonl'
+        cwd = root / cwd_sub if cwd_sub else root
+        claude_turn(transcript, str(cwd), edited(root) if callable(edited) else edited, padding)
+        calls = []
+        real = hook.read_rows
+
+        def spy(*a, **k):
+            calls.append(k.get('tail_bytes'))
+            return real(*a, **k)
+
+        with patch.object(report, 'REPORTS_DIR', Path(d) / 'r'), patch.dict(os.environ, {'RECEIPTS_LANG': ''}),                 patch.object(hook, 'read_rows', spy), patch.object(hook, 'HOOK_TAIL_BYTES', window or 8 * 1024 * 1024):
+            warning = handle_hook('claude', {'transcript_path': str(transcript), 'session_id': 's', 'cwd': str(cwd)})
+        return warning, calls
+
+    def test_hook_tail_window_is_used_when_turn_fits(self):
+        with tempfile.TemporaryDirectory() as d:
+            warning, calls = self.spy_hook(d, lambda r: str(r / 'tests' / 'test_b.py'), padding=5000, window=2500)
+            self.assertIn('signals: 1', warning)
+            self.assertEqual(calls, [2500])  # no full read
+
+    def test_hook_falls_back_to_full_read_when_turn_starts_before_window(self):
+        with tempfile.TemporaryDirectory() as d:
+            warning, calls = self.spy_hook(d, lambda r: str(r / 'tests' / 'test_b.py'), padding=5000, window=50)
+            self.assertIn('signals: 1', warning)
+            self.assertEqual(calls[0], 50)
+            self.assertIn(None, calls)
+
+    def test_hook_ignores_same_named_file_outside_repo(self):
+        with tempfile.TemporaryDirectory() as d, tempfile.TemporaryDirectory() as other:
+            self.assertIsNone(self.run_hook_on(d, str(Path(other) / 'tests' / 'test_b.py')))
+
+    def test_hook_does_not_match_nested_path_by_suffix(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.assertIsNone(self.run_hook_on(d, str(Path(d) / 'pkg' / 'tests' / 'test_b.py')))
+
+    def test_hook_from_repo_subdirectory_matches_repo_root_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / 'sub').mkdir()
+            (Path(d) / 'sub' / 'keep.txt').write_text('x', encoding='utf-8')
+            warning, _ = self.spy_hook(d, lambda r: str(r / 'tests' / 'test_b.py'), cwd_sub='sub')
+            self.assertIn('signals: 1', warning)
+
+    def test_codex_tail_is_accepted_with_head_session_meta(self):
+        from receipts import hook, report
+        with tempfile.TemporaryDirectory() as d:
+            root = git_repo_with_two_weakened_tests(d)
+            cwd = str(root)
+            item = lambda turn, v: {'type': 'event_msg', 'payload': {'type': 'item_completed', 'turn_id': turn, 'item': v}}
+            rows = [{'type': 'session_meta', 'payload': {'id': 's', 'cwd': cwd}},
+                    item('t1', {'type': 'UserMessage', 'id': 'u1', 'content': [{'type': 'text', 'text': 'old ' + 'p' * 5000}]}),
+                    item('t1', {'type': 'AgentMessage', 'id': 'a1', 'content': [{'type': 'text', 'text': 'ok'}]}),
+                    item('t2', {'type': 'UserMessage', 'id': 'u2', 'content': [{'type': 'text', 'text': 'now edit'}]}),
+                    item('t2', {'type': 'FileChange', 'id': 'f', 'status': 'completed',
+                                'changes': {str(root / 'tests' / 'test_b.py'): {'type': 'update'}}}),
+                    item('t2', {'type': 'AgentMessage', 'id': 'a2', 'content': [{'type': 'text', 'text': 'Done.'}]})]
+            transcript = Path(d) / 'c.jsonl'
+            transcript.write_text('\n'.join(json.dumps(r) for r in rows), encoding='utf-8')
+            calls = []
+            real = hook.read_rows
+
+            def spy(*a, **k):
+                calls.append((k.get('tail_bytes'), k.get('max_rows')))
+                return real(*a, **k)
+
+            with patch.object(report, 'REPORTS_DIR', Path(d) / 'r'), patch.dict(os.environ, {'RECEIPTS_LANG': ''}),                     patch.object(hook, 'read_rows', spy), patch.object(hook, 'HOOK_TAIL_BYTES', 2500):
+                warning = handle_hook('codex', {'transcript_path': str(transcript), 'session_id': 's', 'cwd': cwd})
+            self.assertIn('signals: 1', warning)
+            self.assertNotIn((None, None), calls)  # never a full read
