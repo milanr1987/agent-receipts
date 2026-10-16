@@ -1,14 +1,26 @@
 import re
-from pathlib import PurePosixPath
-from .claims import runner, git_operation
+from .claims import runner, git_operation, command_segments
 from .messages import t
 from .models import Verdict
 
+FAIL_RE = re.compile(r'(?im)\b[1-9]\d*\s+(?:failed|failures?|errors?)\b|FAILED\s*\([^)]*(?:failures|errors)=[1-9]|^FAIL\s*$|test result: FAILED')
+PASS_RE = re.compile(r'(?im)^OK(?:\s|$)|\b\d+\s+passed\b|test result: ok')
+# Jest "Tests: 1 failed, 94 passed, 95 total"; Vitest "Tests  95 passed (95)". Never "Test Files"/"Test Suites".
+JS_TESTS_RE = re.compile(r'(?im)^\s*Tests:?\s+(?:\d+\s+\w+,\s*)*(\d+)\s+passed\b[^\n]*')
+SUMMARY_RE = {
+    'unittest': re.compile(r'Ran \d+ tests? in [\d.]+s\s+(?:OK|FAILED)[^\n]*'),
+    'pytest': re.compile(r'(?m)^=+ [^\n]*\b(?:passed|failed|errors?)\b[^\n]*=+[ \t]*$'),
+    'vitest': JS_TESTS_RE, 'jest': JS_TESTS_RE, 'npm': JS_TESTS_RE,
+}
+SETUP_SEGMENT = re.compile(r'(?i)^(?:(?:cd|pushd|set-location|export|set|source)\s|\.\s+\S*activate|\$env:\w+\s*=|\w+=\S*$)')
+
+
+def _exit_failed(result):
+    return bool(result.is_error) or (result.exit_code is not None and result.exit_code != 0)
+
 
 def _failed(result):
-    if result.is_error or (result.exit_code is not None and result.exit_code != 0):
-        return True
-    return bool(re.search(r'(?im)\b[1-9]\d*\s+(?:failed|failures?|errors?)\b|FAILED\s*\([^)]*(?:failures|errors)=[1-9]|^FAIL\s*$|test result: FAILED', result.text))
+    return _exit_failed(result) or bool(FAIL_RE.search(result.text))
 
 
 def _successful(result, tests=False):
@@ -18,13 +30,69 @@ def _successful(result, tests=False):
     if result.exit_code == 0 and not (tests and result.exit_source == 'host_success_flag'):
         return True
     if tests:
-        return bool(re.search(r'(?im)^OK(?:\s|$)|\b\d+\s+passed\b|test result: ok', result.text))
+        return bool(PASS_RE.search(result.text))
     # Successful edit/write tool_result (not Bash) has a reliable tool success flag.
     return result.tool_name in ('Write', 'Edit', 'MultiEdit') and result.is_error is False
 
 
 def _source(result):
     return f' [{result.exit_source}]' if result.exit_source else ''
+
+
+def is_compound(command):
+    """True when a runner shares the command with steps other than cd/env setup."""
+    return any(not SETUP_SEGMENT.match(s) and not runner(s) for s in command_segments(command))
+
+
+def runner_summary(name, text):
+    pattern = SUMMARY_RE.get(name)
+    matches = list(pattern.finditer(text)) if pattern else []
+    return matches[-1].group(0) if matches else None
+
+
+def test_count(name, text):
+    if name == 'unittest':
+        found = re.findall(r'\bRan\s+(\d+)\s+tests?\b', text)
+    elif name in ('vitest', 'jest', 'npm'):
+        found = JS_TESTS_RE.findall(text)
+    elif name == 'pytest':
+        found = re.findall(r'\b(\d+)\s+passed\b', text)
+    else:
+        found = []
+    return int(found[-1]) if found else None
+
+
+def _check_counts(claim, name, text):
+    requested = re.search(r'(?i)\b(\d+)\s+(?:tests?|testova|testa|testovi)\b', claim.quote)
+    actual = test_count(name, text)
+    if requested and actual is not None and actual != int(requested[1]):
+        return 'CONTRADICTED'
+    skipped = re.search(r'(?i)skipped[=: ]+(\d+)', text)
+    if skipped and int(skipped[1]) and re.search(r'(?i)without skips|no skips|bez preskakanja', claim.quote):
+        return 'CONTRADICTED'
+    return 'CONFIRMED'
+
+
+def _test_verdict(claim, call, result):
+    name = runner(call.text)
+    proof = (t('proof_runner', call=call.line, runner=name, result=result.line,
+               exit=result.exit_code, source=_source(result), status=result.status),)
+    if is_compound(call.text):
+        # Exit code and stray numbers belong to the other steps; judge the runner summary only.
+        text = runner_summary(name, result.text)
+        if text is None:
+            return 'NO_EVIDENCE', (t('proof_compound', call=call.line),)
+        if FAIL_RE.search(text):
+            return 'CONTRADICTED', proof
+        if not PASS_RE.search(text):
+            return 'NO_EVIDENCE', proof
+    else:
+        text = result.text
+        if _failed(result):
+            return 'CONTRADICTED', proof
+        if not _successful(result, tests=True):
+            return 'NO_EVIDENCE', proof
+    return _check_counts(claim, name, text), proof
 
 
 def evaluate(session, claims):
@@ -49,30 +117,17 @@ def evaluate(session, claims):
                 call = test_calls[-1]
                 result = next((e for e in reversed(results) if e.tool_id == call.tool_id and e.turn == claim.event.turn), None)
                 if result:
-                    if _failed(result):
-                        status = 'CONTRADICTED'
-                    elif _successful(result, tests=True):
-                        status = 'CONFIRMED'
-                        requested = re.search(r'(?i)\b(\d+)\s+(?:tests?|testova|testa|testovi)\b', claim.quote)
-                        actual = re.search(r'(?i)Ran\s+(\d+)\s+tests|\b(\d+)\s+passed', result.text)
-                        skips = re.search(r'(?i)skipped[=: ]+(\d+)', result.text)
-                        if requested and actual:
-                            count = int(actual[1] or actual[2])
-                            if skips and 'Ran ' in actual[0]:
-                                count -= int(skips[1])
-                            if count != int(requested[1]):
-                                status = 'CONTRADICTED'
-                        if skips and int(skips[1]) and re.search(r'(?i)without skips|no skips|bez preskakanja', claim.quote):
-                            status = 'CONTRADICTED'
-                    proof = (t('proof_runner', call=call.line, runner=runner(call.text), result=result.line, exit=result.exit_code, source=_source(result), status=result.status),)
+                    status, proof = _test_verdict(claim, call, result)
         elif claim.type in ('committed', 'pushed'):
             operation = 'commit' if claim.type == 'committed' else 'push'
             for result in reversed(results):
                 call = calls.get(result.tool_id)
                 if not call or not git_operation(call.text, operation):
                     continue
-                proof = (t('proof_git', call=call.line, op=operation, result=result.line, exit=result.exit_code, source=_source(result)),)
-                if _failed(result):
+                proof = (t('proof_git', call=call.line, op=operation, result=result.line,
+                           exit=result.exit_code, source=_source(result)),)
+                # Git output text (commit messages) is not a failure signal; only the exit is.
+                if _exit_failed(result):
                     status = 'CONTRADICTED'
                 elif result.exit_code == 0 and result.status == 'completed':
                     if operation == 'commit' and re.search(r'\[[^\]\n]+\s+[0-9a-f]{7,40}\]', result.text):

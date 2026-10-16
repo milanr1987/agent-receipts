@@ -1,5 +1,7 @@
+import os
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 from receipts.models import Event, Session
 from receipts.claims import extract_claims, runner
 from receipts.evidence import evaluate
@@ -140,6 +142,39 @@ class EvidenceTests(unittest.TestCase):
                 self.assertEqual(verdict(cmd,'',exit_code=0).status,'NO_EVIDENCE')
         self.assertEqual(verdict('git push --dry-run origin main','main -> main','I pushed the changes').status,'NO_EVIDENCE')
         self.assertEqual(verdict('git push -nv origin main','main -> main','I pushed the changes').status,'NO_EVIDENCE')
+
+    def test_vitest_jest_counts_tests_not_files(self):
+        out = ' Test Files  17 passed (17)\n      Tests  95 passed (95)\n'
+        self.assertEqual(verdict('npx vitest run', out, 'Full suite: 17 passed, 95 tests passed').status, 'CONFIRMED')
+        self.assertEqual(verdict('npx jest', 'Tests:       95 passed, 95 total', 'All 95 tests pass').status, 'CONFIRMED')
+        self.assertEqual(verdict('npx jest', 'Tests:       94 passed, 94 total', 'All 95 tests pass').status, 'CONTRADICTED')
+
+    def test_skips_only_contradict_when_claim_says_no_skips(self):
+        out = 'Ran 213 tests in 1.000s\n\nOK (skipped=2)'
+        self.assertEqual(verdict('python -m unittest', out, 'All 213 tests pass').status, 'CONFIRMED')
+        self.assertEqual(verdict('python -m unittest', out, 'All 213 tests pass without skips').status, 'CONTRADICTED')
+
+    def test_count_mismatch_still_contradicted(self):
+        self.assertEqual(verdict('python -m unittest', 'Ran 212 tests in 22.947s\n\nOK', 'Svih 213 testova prolazi').status, 'CONTRADICTED')
+
+    @patch.dict(os.environ, {'RECEIPTS_LANG': ''})
+    def test_compound_command_uses_runner_summary(self):
+        out = 'Ran 212 tests in 22.900s\n\nOK\nscan: 3 errors in plugin metadata\n'
+        self.assertEqual(verdict('python -m unittest discover && python tools/scan.py', out,
+                                 'Svi testovi prolaze (212)', exit_code=1).status, 'CONFIRMED')
+        no_summary = verdict('python -m unittest && python tools/scan.py', 'scan finished', 'All tests pass')
+        self.assertEqual(no_summary.status, 'NO_EVIDENCE')
+        self.assertIn('compound', no_summary.evidence[0])
+        self.assertEqual(verdict('python -m unittest && python tools/scan.py', 'Ran 3 tests in 0.1s\n\nFAILED (failures=1)',
+                                 'All tests pass', exit_code=1).status, 'CONTRADICTED')
+
+    def test_setup_prefix_is_not_compound(self):
+        self.assertEqual(verdict('cd "/p" && python -m unittest', 'Ran 2 tests\nOK').status, 'CONFIRMED')
+        self.assertEqual(verdict('cd /p && pytest -q', '1 failed', exit_code=1).status, 'CONTRADICTED')
+        self.assertEqual(verdict('export X=1; source .venv/bin/activate && pytest', '3 passed').status, 'CONFIRMED')
+
+    def test_git_output_numbers_do_not_contradict_commit(self):
+        self.assertEqual(verdict('git commit -m "fix 2 errors"', '[main abc1234] fix 2 errors', 'I committed the fix').status, 'CONFIRMED')
 
 
 class ClaudeFixtureTests(unittest.TestCase):
