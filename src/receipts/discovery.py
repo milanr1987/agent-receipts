@@ -25,18 +25,29 @@ def _project_cwd(path):
     return None
 
 
-def discover(home, source='all', since=None, profile=None, project=None):
+PROFILE_RE = re.compile(r'\.claude[\w.-]*')
+
+
+def _claude_roots(home, profile, env):
+    if profile is not None:
+        if not PROFILE_RE.fullmatch(profile) or not (home / profile).is_dir():
+            raise ValueError(t('unknown_profile', name=profile))
+        return [home / profile / 'projects']
+    roots = [p / 'projects' for p in sorted(home.glob('.claude*'))
+             if PROFILE_RE.fullmatch(p.name) and p.is_dir()]
+    if env.get('CLAUDE_CONFIG_DIR'):
+        roots.append(Path(env['CLAUDE_CONFIG_DIR']).expanduser() / 'projects')
+    return roots
+
+
+def discover(home, source='all', since=None, profile=None, project=None, env=None, include_subagents=False):
     home = Path(home)
+    env = os.environ if env is None else env
     roots = []
     if source in ('all', 'codex') and not profile:
-        codex_home = Path(os.environ.get('CODEX_HOME', str(home / '.codex')))
-        roots.append(codex_home / 'sessions')
+        roots.append(Path(env.get('CODEX_HOME') or home / '.codex') / 'sessions')
     if source in ('all', 'claude'):
-        if profile and profile not in ('.claude', '.claude-max', '.claude-pro'):
-            raise ValueError(t('unknown_profile', name=profile))
-        roots.extend(home / name / 'projects' for name in ([profile] if profile else ['.claude', '.claude-max', '.claude-pro']))
-        if not profile and os.environ.get('CLAUDE_CONFIG_DIR'):
-            roots.append(Path(os.environ['CLAUDE_CONFIG_DIR']) / 'projects')
+        roots.extend(_claude_roots(home, profile, env))
     found = []
     for root in roots:
         if not root.is_dir():
@@ -44,6 +55,9 @@ def discover(home, source='all', since=None, profile=None, project=None):
         for path in root.rglob('*.jsonl'):
             try:
                 if path.is_symlink():
+                    continue
+                # Subagent reports already appear in the parent session as Agent tool results.
+                if not include_subagents and 'subagents' in path.relative_to(root).parts:
                     continue
                 if since and path.stat().st_mtime < since.timestamp():
                     continue

@@ -33,6 +33,7 @@ class Session:
     session_id: str
     events: tuple[Event, ...]
     diagnostics: tuple[Diagnostic, ...] = ()
+    subagent: bool = False
 
 
 @dataclass(frozen=True)

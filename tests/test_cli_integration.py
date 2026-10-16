@@ -28,12 +28,29 @@ class IntegrationTests(unittest.TestCase):
     def test_discovery_missing_and_filters(self):
         with tempfile.TemporaryDirectory() as d:
             home=Path(d)
-            self.assertEqual(discover(home,'all'),())
+            self.assertEqual(discover(home,'all',env={}),())
             path=home/'.codex/sessions/2026/10/15/session.jsonl';path.parent.mkdir(parents=True);fixture(path)
-            self.assertEqual(discover(home,'codex'),(path,))
-            self.assertEqual(discover(home,'claude'),())
-            self.assertEqual(discover(home,'all',project=Path('C:/Users/Example/other')),())
+            self.assertEqual(discover(home,'codex',env={}),(path,))
+            self.assertEqual(discover(home,'claude',env={}),())
+            self.assertEqual(discover(home,'all',project=Path('C:/Users/Example/other'),env={}),())
         with self.assertRaises(ValueError):parse_since('bananas')
+
+    def test_discovery_profiles_env_and_subagents(self):
+        with tempfile.TemporaryDirectory() as d:
+            home=Path(d)
+            main_s=home/'.claude/projects/p/s.jsonl'
+            sub=home/'.claude/projects/p/s/subagents/agent-1.jsonl'
+            work=home/'.claude-work/projects/p/w.jsonl'
+            other=home/'elsewhere/projects/p/o.jsonl'
+            for p in (main_s,sub,work,other):
+                p.parent.mkdir(parents=True,exist_ok=True);p.write_text('{}',encoding='utf-8')
+            self.assertEqual(discover(home,'claude',env={}),tuple(sorted([main_s,work],key=str)))
+            self.assertEqual(discover(home,'claude',env={},include_subagents=True),tuple(sorted([main_s,sub,work],key=str)))
+            self.assertEqual(discover(home,'claude',profile='.claude-work',env={}),(work,))
+            self.assertIn(other,discover(home,'claude',env={'CLAUDE_CONFIG_DIR':str(home/'elsewhere')}))
+            for bad in ('.claude-missing','../evil','projects'):
+                with self.subTest(bad=bad),self.assertRaises(ValueError):
+                    discover(home,'claude',profile=bad,env={})
 
     def test_audit_offline_redacted_and_unchanged(self):
         from receipts import report

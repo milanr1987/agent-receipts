@@ -1,5 +1,5 @@
 import argparse
-from dataclasses import asdict
+from dataclasses import asdict, replace
 import json
 from pathlib import Path
 import sys
@@ -45,6 +45,7 @@ def _run(argv):
     audit.add_argument('--source', choices=['all','claude','codex'], default='all')
     audit.add_argument('--profile')
     audit.add_argument('--project', type=Path)
+    audit.add_argument('--include-subagents', action='store_true')
     diff = commands.add_parser('check-diff', help=t('help_diff'), parents=[lang_opt])
     diff.add_argument('--project', type=Path, default=Path.cwd())
     diff.add_argument('--base', default='HEAD')
@@ -56,13 +57,15 @@ def _run(argv):
     try:
         if args.action == 'audit':
             paths = (Path(args.session).expanduser(),) if args.session else discover(Path.home(),args.source,
-                parse_since(args.since),args.profile,args.project)
+                parse_since(args.since),args.profile,args.project,include_subagents=args.include_subagents)
             results, incomplete = [], False
             for path in paths:
                 source = detect(path)
                 if args.source != 'all' and source != args.source:
                     continue
                 session = (codex if source == 'codex' else claude).parse(path)
+                if 'subagents' in path.parts:
+                    session = replace(session, subagent=True)
                 incomplete |= any(d.code != 'mirror_suppressed' for d in session.diagnostics)
                 results.append((session,evaluate(session,extract_claims(session.events))))
             output = report.save_report(report.render_report(results))
