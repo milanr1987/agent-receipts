@@ -37,6 +37,38 @@ class ClaimsTests(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertEqual(extract_claims([event('assistant_text', text, 1)]), ())
 
+    def test_markdown_and_intent_are_not_claims(self):
+        for text in ['| 1 | Scroll | Test je commitovan i poslan |',
+                     '- `pushed`: "pushao sam"',
+                     '```\nI committed the fix\n```',
+                     '> All tests pass',
+                     'Cilj je da testovi prolaze',
+                     'Kad testovi prolaze, commitujem',
+                     'Testovi će proći i tada commitovano',
+                     'staging ograničavam, commitujem, pa pregledam committed diff',
+                     "I'm going to push once tests pass"]:
+            with self.subTest(text=text):
+                self.assertEqual(extract_claims([event('assistant_text', text, 1)]), ())
+
+    def test_real_claims_survive_stripping(self):
+        for text, typ in [('Created `src/new.py`', 'file_created'),
+                          ('Izmjene su commitovane i poslane u granu main.', 'committed'),
+                          ('Svih 213 testova prolazi', 'tests_pass'),
+                          ('Testovi prolaze (56).', 'tests_pass')]:
+            with self.subTest(text=text):
+                self.assertIn(typ, [c.type for c in extract_claims([event('assistant_text', text, 1)])])
+
+    def test_git_dash_c_recognised(self):
+        from receipts.claims import git_operation
+        self.assertTrue(git_operation('git -C "/p q" push origin main', 'push'))
+        self.assertTrue(git_operation('git -C /p --no-optional-locks commit -m x', 'commit'))
+
+    def test_claude_fixture_claim_types(self):
+        session = claude.parse(FIXTURES / 'claude-2.1.300.jsonl')
+        self.assertEqual([c.type for c in extract_claims(session.events)], ['committed', 'pushed', 'tests_pass'])
+        verdicts = evaluate(session, extract_claims(session.events))
+        self.assertEqual({v.claim.type: v.status for v in verdicts}['pushed'], 'CONFIRMED')
+
     def test_document_read_not_runner(self):
         self.assertIsNone(runner('Get-Content README.md # python -m unittest'))
         self.assertIsNone(runner('echo "pytest -q"'))

@@ -9,7 +9,18 @@ PATTERNS = {
     'files_changed': r'\b(?:updated|changed|modified|izmijenio sam|izmenio sam)\s+(\d+)\s+(?:files|fajlova)\b',
     'file_created': r'\b(?:created|napravio sam fajl|kreirao sam fajl)\s+[`"\x27]?([\w./\\-]+\.[\w]+)',
 }
-EXCLUDE = re.compile(r'(?i)\b(?:will|would|should|must|need to|make sure|if|claims?|asserts?|nije|nisu|not|never|bez dokaza)\b')
+EXCLUDE = re.compile(r'(?i)\b(?:will|would|should|must|need to|make sure|if|claims?|asserts?|nije|nisu|not|never|bez dokaza'
+                     r'|going to|once|until|goal|ću|ćeš|će|ćemo|ćete|treba|trebalo|ako|kad|kada|cilj je|da bi)\b')
+PATH_TOKEN = re.compile(r'[\w./\\-]+\.\w+')
+
+
+def strip_non_claims(text):
+    """Drop markdown that quotes or tabulates text instead of asserting it."""
+    text = re.sub(r'(?s)```.*?(?:```|\Z)', '\n', text)
+    # Keep inline code only when it is a file path, so "Created `a.py`" still names the file.
+    text = re.sub(r'`([^`\n]*)`', lambda m: m[1] if PATH_TOKEN.fullmatch(m[1]) else ' ', text)
+    text = '\n'.join(line for line in text.split('\n') if not re.match(r'\s*[|>]', line))
+    return re.sub(r'"[^"\n]*"|“[^”\n]*”|„[^“”\n]*[“”]', ' ', text)
 
 
 def extract_claims(events):
@@ -17,7 +28,7 @@ def extract_claims(events):
     for event in events:
         if event.kind != 'assistant_text':
             continue
-        for sentence in re.split(r'[\n!?;]+|(?<=[a-z])\.\s+(?=[A-Z])', event.text):
+        for sentence in re.split(r'[\n!?;]+|(?<=[a-z])\.\s+(?=[A-Z])', strip_non_claims(event.text)):
             clean = sentence.replace('**', '').strip()
             if EXCLUDE.search(clean) or re.search(r'["“].*?(?:tests|testovi).*?["”]', clean, re.I):
                 continue
@@ -25,7 +36,7 @@ def extract_claims(events):
                 match = re.search(pattern, clean, re.I)
                 if not match:
                     continue
-                if typ == 'committed' and re.search(r'committed\s+cleanup', clean, re.I):
+                if typ == 'committed' and re.search(r'committed\s+(?:cleanup|diff)', clean, re.I):
                     continue
                 value = match[1] if match.lastindex else None
                 found.append(Claim(typ, event, clean[:200], value))
@@ -71,6 +82,7 @@ def git_operation(command, operation):
         if re.search(r'(?:^|\s)(?:--dry-run|--help|--version|-[A-Za-z]*n[A-Za-z]*)(?:\s|$)', segment):
             continue
         # Fixed accepted pre-subcommand options. Unknown compositions stay unverified.
-        if re.match(r'(?i)^(?:"?[^\s"]*[\\/])?git(?:\.exe)?"?\s+(?:(?:--no-optional-locks)\s+)?' + operation + r'\b', segment):
+        if re.match(r'(?i)^(?:"?[^\s"]*[\\/])?git(?:\.exe)?"?\s+(?:(?:--no-optional-locks|-C\s+(?:"[^"]*"|\S+))\s+)*'
+                    + operation + r'\b', segment):
             return True
     return False
