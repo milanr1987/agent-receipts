@@ -48,6 +48,8 @@ def repo_root(root):
 def changed_versions(root, base='HEAD', include=None, paths=None, resolved=False):
     """paths: repo-relative files to list (literal pathspecs); resolved: root is already the repo top level."""
     root = Path(root) if resolved else repo_root(root)
+    if paths is not None and not paths:
+        return []
     spec = ['--'] + [':(literal)' + p for p in paths] if paths else ['--']
     if not re.fullmatch(r'(?:HEAD(?:[~^]\d*)?|[A-Za-z0-9][A-Za-z0-9_./-]*)', base) or '..' in base:
         raise ValueError(t('git_bad_base'))

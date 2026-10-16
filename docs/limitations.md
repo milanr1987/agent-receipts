@@ -37,6 +37,7 @@
 - The hook sees only edits made with Write, Edit, MultiEdit and Codex file_change. Files changed through Bash (sed, redirects, formatters) are not checked.
 - Claims made in a turn without any tool call are listed as "Mentioned in conversation" and do not set exit 1. They are still NO_EVIDENCE, not proof of falsehood.
 - On large repositories the hook runs a few Git calls and parses the transcript tail. Measured on one owner machine: about 0.85 to 1.2 s with an 11.5 MB transcript in a repository with many changed files, 0.5 s in the small checkout. The hook limit is 10 s and the hook fails open.
+- For a file that no longer exists (deleted), the hook cannot recover its on-disk case, so a delete typed in a different case may be missed. A turn editing hundreds of files may exceed the Windows command-line limit; the hook then fails open.
 - Hooks have simulated stdin tests, not a live-host acceptance test. macOS/Linux launchers are not verified.
 - Actual five-day usage metrics remain pending. The Phase 0 sample contains no
   verified negative examples; recall cannot be established from that sample.

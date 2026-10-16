@@ -31,6 +31,9 @@ class PackagingTests(unittest.TestCase):
         data = tomllib.loads((ROOT / 'pyproject.toml').read_text(encoding='utf-8'))
         self.assertEqual(data['project']['license'], 'MIT')
         self.assertIn('MIT License', (ROOT / 'LICENSE').read_text(encoding='utf-8'))
+        floors = [r for r in data['build-system']['requires'] if r.startswith('setuptools>=')]
+        self.assertEqual(len(floors), 1)
+        self.assertGreaterEqual(int(floors[0].split('>=')[1].split('.')[0]), 77)
 
     def test_shell_scripts_use_lf(self):
         for name in ('setup.sh', 'receipts.sh', 'receipts-hook.sh'):

@@ -45,6 +45,8 @@ class ReadRowsTests(unittest.TestCase):
             lines = [json.dumps({'n': i, 't': 'čćž' * 5}, ensure_ascii=False).encode('utf-8') for i in range(50)]
             p = write_lines(d, lines)
             tail = sum(len(x) + 1 for x in lines[-10:]) + 3
+            data = p.read_bytes()
+            self.assertEqual(data[len(data) - tail] & 0xC0, 0x80)  # window starts inside a multi-byte character
             rows, diags = read_rows(p, tail_bytes=tail)
             self.assertEqual([r['n'] for _, r in rows], list(range(40, 50)))
             self.assertEqual(diags, [])

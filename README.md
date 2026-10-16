@@ -90,7 +90,7 @@ Rules:
 - A commit is proven by git's `[branch sha]` line, or, for `git commit -q`, by a following `git log --oneline` line with the same subject.
 - A successful historical push does not verify the current remote. The tool never runs `fetch`, `ls-remote`, `push` or `commit`.
 
-Exit codes: **0** nothing flagged, **1** claims to review (claims made in a turn without any tool call are listed under "Mentioned in conversation" and do not set exit 1), **2** incomplete (no sessions, an explicitly given file that is unreadable or unknown, or an oversized session).
+Exit codes: **0** nothing flagged, **1** claims to review (claims made in a turn without any tool call are listed under "Mentioned in conversation" and do not set exit 1), **2** incomplete (no sessions, an explicitly given file that is unreadable or unknown, or an oversized session). A session listed under "To review" only for diagnostics (for example a skipped oversized line) does not set exit 1.
 
 Reports are written to `--out DIR`, else `$RECEIPTS_HOME/reports`, else `reports/` in a source checkout, else `%LOCALAPPDATA%\agent-receipts\reports` on Windows or `${XDG_STATE_HOME:-~/.local/state}/agent-receipts/reports`.
 

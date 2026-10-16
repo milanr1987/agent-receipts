@@ -30,7 +30,7 @@ def _needs_review(verdict):
 
 def _with_metadata(session):
     first = session.events[0] if session.events else None
-    cwd = (first.cwd if first else '').rstrip('\\/')
+    cwd = redact(first.cwd if first else '').rstrip('\\/')
     project = re.split(r'[\\/]', cwd)[-1] if cwd else ''
     return replace(session, project=project, started_at=first.timestamp if first else None)
 

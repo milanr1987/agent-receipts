@@ -57,7 +57,7 @@ def render_report(results, skipped=0):
     order = {'CONTRADICTED': 0, 'NO_EVIDENCE': 1}
     review, conversation, confirmed = [], [], []
     for session, verdicts in results:
-        flagged = sorted((v for v in verdicts if v.status != 'CONFIRMED' and not v.conversation_only),
+        flagged = sorted((v for v in verdicts if v.status == 'CONTRADICTED' or (v.status == 'NO_EVIDENCE' and not v.conversation_only)),
                          key=lambda v: (order[v.status], v.claim.event.line))
         if flagged or session.diagnostics:
             review.append((session, flagged))
