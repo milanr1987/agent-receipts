@@ -144,6 +144,54 @@ class IntegrationTests(unittest.TestCase):
         text=render_report([(Session('claude','s',(event,),subagent=True),(Verdict(Claim('tests_pass',event,event.text),'NO_EVIDENCE',()),))])
         self.assertIn('(subagent)',text)
 
+    def test_report_groups_review_conversation_confirmed(self):
+        from receipts.models import Event,Claim,Verdict,Session
+        def v(text,status,conv=False,turn='1'):
+            e=Event('claude','abcdef1234567','C:/Users/Private/my-app',3,turn,'assistant_text',text,timestamp='2026-10-16T10:42:00Z')
+            return Verdict(Claim('tests_pass',e,text),status,('line 2: x',),conv)
+        s=Session('claude','abcdef1234567',(),project='my-app',started_at='2026-10-16T10:42:00Z')
+        empty=Session('codex','empty1',())
+        text=render_report([(s,(v('Ok one','CONFIRMED'),v('Chat says pass','NO_EVIDENCE',True),v('Bad one','CONTRADICTED'))),(empty,())],skipped=1)
+        review,conv,conf=text.index('## To review'),text.index('## Mentioned in conversation'),text.index('## Confirmed')
+        self.assertLess(review,conv);self.assertLess(conv,conf)
+        self.assertIn('### my-app · 2026-10-16 10:42 · claude abcdef12',text)
+        self.assertLess(text.index('Bad one'),conv)
+        self.assertGreater(text.index('Chat says pass'),conv)
+        self.assertIn('Skipped 1 files · 1 sessions without claims',text)
+        self.assertNotIn('empty1',text)
+        self.assertNotIn('Private',text)
+
+    def test_conversation_only_report_exits_zero(self):
+        from receipts import report
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);path=root/'s.jsonl'
+            path.write_text(json.dumps({'type':'event_msg','payload':{'type':'task_complete','turn_id':'t','last_agent_message':'All tests pass'}}),encoding='utf-8')
+            with patch.object(report,'REPORTS_DIR',root/'r'),redirect_stdout(io.StringIO()):
+                self.assertEqual(main(['audit',str(path)]),0)
+            text=''.join(p.read_text(encoding='utf-8') for p in (root/'r').glob('*.md'))
+            self.assertNotIn('## To review',text)
+            self.assertNotIn('## Confirmed',text)
+
+    def test_printed_report_path_is_real(self):
+        from receipts import report
+        with tempfile.TemporaryDirectory(prefix='receipts-Private-') as d:
+            root=Path(d);path=root/'s.jsonl';fixture(path)
+            with patch.object(report,'REPORTS_DIR',root/'r'),redirect_stdout(io.StringIO()) as out:
+                main(['audit',str(path)])
+            self.assertIn(str(root/'r'),out.getvalue())
+
+    def test_json_has_project_started_and_conversation_flag(self):
+        from receipts import report
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);path=root/'s.jsonl';fixture(path)
+            with patch.object(report,'REPORTS_DIR',root/'r'),redirect_stdout(io.StringIO()) as out,redirect_stderr(io.StringIO()):
+                main(['audit',str(path),'--format','json'])
+            data=json.loads(out.getvalue())
+            self.assertEqual(data['sessions'][0]['project'],'project')
+            self.assertIn('started_at',data['sessions'][0])
+            self.assertFalse(data['sessions'][0]['verdicts'][0]['conversation_only'])
+            self.assertEqual(data['summary']['sessions_without_claims'],0)
+
     def test_malformed_not_clean(self):
         with tempfile.TemporaryDirectory() as d:
             p=Path(d)/'bad.jsonl';p.write_text('not json')

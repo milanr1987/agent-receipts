@@ -2,6 +2,7 @@ import argparse
 from dataclasses import asdict, replace
 from datetime import date
 import json
+import re
 from pathlib import Path
 import sys
 from . import __version__
@@ -21,6 +22,17 @@ def _language(argv):
     pre.add_argument('--lang')
     known, _ = pre.parse_known_args(argv)
     return known.lang
+
+
+def _needs_review(verdict):
+    return verdict.status == 'CONTRADICTED' or (verdict.status == 'NO_EVIDENCE' and not verdict.conversation_only)
+
+
+def _with_metadata(session):
+    first = session.events[0] if session.events else None
+    cwd = (first.cwd if first else '').rstrip('\\/')
+    project = re.split(r'[\\/]', cwd)[-1] if cwd else ''
+    return replace(session, project=project, started_at=first.timestamp if first else None)
 
 
 def main(argv=None):
@@ -83,6 +95,7 @@ def _run(argv):
                 if args.source != 'all' and source != args.source:
                     continue
                 session = (codex if source == 'codex' else claude).parse(path, read)
+                session = _with_metadata(session)
                 if 'subagents' in path.parts:
                     session = replace(session, subagent=True)
                 incomplete |= any(d.code in FATAL_DIAGNOSTICS for d in session.diagnostics)
@@ -91,13 +104,13 @@ def _run(argv):
                 text = report.render_json(results, skipped)
                 output = report.save_report(text, date.today().isoformat() + '.json', args.out, already_redacted=True)
                 print(text)
-                print(redact(t('report_saved', path=output, n=len(results))), file=sys.stderr)
+                print(t('report_saved', path=output, n=len(results)), file=sys.stderr)
             else:
                 output = report.save_report(report.render_report(results, skipped), out=args.out)
-                print(redact(t('report_saved', path=output, n=len(results))))
+                print(t('report_saved', path=output, n=len(results)))
             if incomplete or not results:
                 return 2
-            return int(any(v.status != 'CONFIRMED' for _, verdicts in results for v in verdicts))
+            return int(any(_needs_review(v) for _, verdicts in results for v in verdicts))
         if args.action == 'check-diff':
             from .git_read import changed_versions
             from .testguard import compare_versions

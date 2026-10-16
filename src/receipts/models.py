@@ -35,6 +35,8 @@ class Session:
     events: tuple[Event, ...]
     diagnostics: tuple[Diagnostic, ...] = ()
     subagent: bool = False
+    project: str = ''
+    started_at: str | None = None
 
 
 @dataclass(frozen=True)

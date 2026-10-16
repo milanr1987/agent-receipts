@@ -50,6 +50,6 @@ class MessagesTests(unittest.TestCase):
                 self.assertEqual(main(['audit', str(path)]), 0)
             bs = ''.join(p.read_text(encoding='utf-8') for p in (root / 'bs').glob('*.md'))
             en = ''.join(p.read_text(encoding='utf-8') for p in (root / 'en').glob('*.md'))
-            self.assertIn('Dokaz', bs)
-            self.assertIn('Evidence', en)
+            self.assertIn('Potvrđeno', bs)
+            self.assertIn('Confirmed', en)
             self.assertEqual(lang(), 'en')
