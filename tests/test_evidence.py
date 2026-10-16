@@ -55,6 +55,19 @@ class ClaimsTests(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertEqual(extract_claims([event('assistant_text', text, 1)]), ())
 
+    def test_reported_speech_expectations_and_state_names_are_not_claims(self):
+        for text in ['a) Claude kaže da testovi prolaze, a nije ih pokrenuo',
+                     'The agent says all tests pass',
+                     'Očekivano: tržišna vrijednost 1.350 USD, 26 testova prolazi',
+                     'Expected: 26 tests pass',
+                     'Primjer: svi testovi prolaze',
+                     'Uz to četiri stanja PROPOSED / AUTHORIZED / COMMITTED / FAILED.',
+                     'Status PUSHED means the remote has it.']:
+            with self.subTest(text=text):
+                self.assertEqual(extract_claims([event('assistant_text', text, 1)]), ())
+        self.assertEqual([c.type for c in extract_claims([event('assistant_text', 'Committed and pushed.', 1)])],
+                         ['committed', 'pushed'])
+
     def test_real_claims_survive_stripping(self):
         for text, typ in [('Created `src/new.py`', 'file_created'),
                           ('Izmjene su commitovane i poslane u granu main.', 'committed'),

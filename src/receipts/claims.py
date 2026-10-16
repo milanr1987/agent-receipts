@@ -11,6 +11,7 @@ PATTERNS = {
 }
 EXCLUDE = re.compile(r'(?i)\b(?:will|would|should|must|need to|make sure|if|claims?|asserts?|nije|nisu|not|never|bez dokaza'
                      r'|going to|until|goal|ću|ćeš|će|ćemo|ćete|treba|trebalo|ako|kad|kada|cilj je|da bi'
+                     r'|kaže|kažu|rekao|says|said|očekivano|očekuje|expected|expect|primjer|example'
                      r'|nothing|none|ništa|(?:did|does|do|is|are|was|were|has|have|had)n[\'’]t)\b')
 PATH_TOKEN = re.compile(r'[\w./\\-]+\.\w+')
 
@@ -33,6 +34,9 @@ def extract_claims(events):
             clean = sentence.replace('**', '').strip()
             if re.search(r'["“].*?(?:tests|testovi).*?["”]', clean, re.I):
                 continue
+            # A leading "Expected:" / "Očekivano:" label covers the whole sentence, not only its first comma clause.
+            if re.match(r'(?i)\s*(?:očekivano|expected|primjer|example)\s*:', clean):
+                continue
             seen = set()
             # Negation/intent words only govern their own clause: "All tests pass, none skipped" is a claim.
             for clause in re.split(r',\s+', clean):
@@ -41,6 +45,9 @@ def extract_claims(events):
                 for typ, pattern in PATTERNS.items():
                     match = re.search(pattern, clause, re.I)
                     if not match or typ in seen:
+                        continue
+                    # Workflow state names (COMMITTED, PUSHED) describe a design, not an action taken.
+                    if typ in ('committed', 'pushed') and match.group(0).isupper():
                         continue
                     if typ == 'committed' and re.search(r'committed\s+(?:cleanup|diff)', clause, re.I):
                         continue
