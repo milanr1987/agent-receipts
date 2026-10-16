@@ -75,6 +75,18 @@ Result:
 - 0.2.0 has no real CONTRADICTED example in this window, so its ability to catch a false claim on real data
   is shown only by unit tests. Precision and recall are still unmeasured until labels exist.
 
+## 0.3.0 probe (2026-10-16)
+
+Counts and timings only; no session content.
+
+- Audit `--since 7d`: exit 1, 27.8 s, 62 sessions (61 Claude, 1 Codex), 51 sessions without claims. Claude: CONFIRMED 34, NO_EVIDENCE 23, CONTRADICTED 0. Codex: no claims, one `line_skipped` diagnostic. Mentioned in conversation: 1. Section order: To review, Mentioned in conversation, Confirmed. Session headings show project and start date.
+- Per-claim comparison with 0.2.0 over the last 30 days: 87 keyed claims in 0.2.0, 82 in 0.3.0. CONFIRMED 46 in both, 0 lost, 0 new. 5 NO_EVIDENCE claims removed, none added, no status changes.
+- Hook, agent-receipts checkout as cwd: 0.49 to 0.54 s.
+- Hook, 11.5 MB transcript of a session in a repository with about 60 changed test files the agent did not edit: 0.2.0 reported 45 weakening signals in 3.6 s. 0.3.0 reports 0 signals. Timings of 0.3.0 by stage: 4.9 to 6.8 s (Git content read for every changed test file, 60 Git calls), 1.7 to 2.3 s (read only touched files, 6 Git calls), 0.85 to 0.98 s (Git listing limited to touched paths, 4 runs).
+- The planned payload (this session transcript with the other repository as cwd) hit `cwd_mismatch` and failed open, so a transcript whose own cwd is in that repository was used instead.
+- Hook output in these runs was a runner warning at most; no weakening signal.
+
+
 ## Five-working-day pilot (not completed)
 
 Use warnings only. Label 10 new real claims independently of tool predictions,

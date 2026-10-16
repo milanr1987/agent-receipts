@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.0 (2026-10-16)
+
+Fixed
+- Oversized transcript lines are skipped with a non-fatal `line_skipped` diagnostic instead of making the session unreadable; files are read once, from the tail where possible; detection scans up to 1000 rows and discovery reads at most 100 rows for a project path.
+- Claims: reported speech and expectation words, a leading "Expected:/Ocekivano:/Example:/Primjer:" label and ALL-CAPS COMMITTED/PUSHED are no longer read as claims.
+- A failed exit without runner output is NO_EVIDENCE; only a venv `activate` counts as setup; the pytest count ignores vitest `Tests` lines.
+- `changed_versions` resolves the repository top level, so a subdirectory cwd works.
+- Hook: testguard runs only on files the agent edited (Write/Edit/MultiEdit, Codex file_change), matched by exact path against the Git top level, case-insensitive on Windows. Git is asked only about those files (literal pathspecs, one top-level lookup).
+- Hook: reads the last 8 MB of the transcript (Codex: plus the session_meta head row), with a full-read fallback.
+
+Added
+- Claims made in a turn without tool calls are flagged `conversation_only`, listed in their own report section and do not set exit 1.
+- The terminal prints the real report path.
+- Report regrouped into To review, Mentioned in conversation and Confirmed; session labels show project and start date. JSON adds `project`, `started_at`, `conversation_only` and `summary.sessions_without_claims` (schema_version stays 1).
+- MIT license.
+
 ## 0.2.0 (2026-10-16)
 
 Fixed

@@ -58,11 +58,28 @@ Discovery reads `~/.codex/sessions` (or `CODEX_HOME`), every `~/.claude*/project
 | NO_EVIDENCE | No usable proof was found. This is not proof the claim is false. |
 | CONTRADICTED | An earlier result says the opposite, for example a failing run or a different test count. |
 
-Illustrative row:
+Illustrative layout (the report groups sessions by what needs a look):
 
 ```text
-| claude / 4f1c… | 812 | All 213 tests pass | CONTRADICTED | line 805: runner unittest; line 806: exit=0 [host_success_flag], status=completed |
+## To review
+
+### my-project · 2026-10-15 12:47 · claude 4f1c0a2b
+
+| Line | Claim | Status | Evidence |
+|---:|---|---|---|
+| 812 | All 213 tests pass | CONTRADICTED | line 805: runner unittest; line 806: exit=0 [host_success_flag], status=completed |
+
+## Mentioned in conversation (no tools in that turn) - 1
+
+| Session | Line | Claim |
+|---|---:|---|
+| other-project · 2026-10-14 07:56 · claude b3dbad36 | 1492 | Tests pass |
+
+## Confirmed - 34
+
+- my-project · 2026-10-15 12:47 · claude 4f1c0a2b: 3 confirmed
 ```
+
 
 Rules:
 
@@ -73,13 +90,17 @@ Rules:
 - A commit is proven by git's `[branch sha]` line, or, for `git commit -q`, by a following `git log --oneline` line with the same subject.
 - A successful historical push does not verify the current remote. The tool never runs `fetch`, `ls-remote`, `push` or `commit`.
 
-Exit codes: **0** nothing flagged, **1** claims to review, **2** incomplete (no sessions, an explicitly given file that is unreadable or unknown, or an oversized session).
+Exit codes: **0** nothing flagged, **1** claims to review (claims made in a turn without any tool call are listed under "Mentioned in conversation" and do not set exit 1), **2** incomplete (no sessions, an explicitly given file that is unreadable or unknown, or an oversized session).
 
 Reports are written to `--out DIR`, else `$RECEIPTS_HOME/reports`, else `reports/` in a source checkout, else `%LOCALAPPDATA%\agent-receipts\reports` on Windows or `${XDG_STATE_HOME:-~/.local/state}/agent-receipts/reports`.
 
 ## Optional hooks
 
 A warning-only Stop hook can flag a "tests pass" claim without a runner in the same turn. Registration is manual; see [docs/hooks.md](docs/hooks.md).
+
+## License
+
+MIT, see [LICENSE](LICENSE).
 
 ## Compatibility
 
