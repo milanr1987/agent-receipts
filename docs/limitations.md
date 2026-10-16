@@ -24,10 +24,17 @@
 - Staged and unstaged versions are inspected separately so a restoration cannot
   hide weakened staged tests. Renames are treated as deletion/addition; review
   removal signals rather than assuming malicious intent.
-- Claude compatibility is fixture-tested but actual local sessions are unavailable.
-  Optional warning-only hooks have simulated stdin tests, not a claimed live-host
-  acceptance test. Windows wrappers are tested on Windows; other platforms should
-  use the Python module directly.
+- Claude Code 2.1.300 and Codex 0.125-0.162 were checked on one owner's Windows sessions. Other versions,
+  operating systems and setups may differ. Claude's success flag proves exit 0, not a test pass; test claims
+  still need runner output. Background commands never count as finished.
+- Markdown stripping drops tables, code and quoted text before claim matching, so a genuine claim written only
+  inside a table is not audited. Sentences with negations or future/conditional words are skipped entirely.
+  Plain sentences such as "testovi prolaze" in a list of criteria can still be read as claims.
+- A runner inside a compound command is judged by its summary line only; runners without a recognized
+  summary (go, cargo, dotnet) in compound commands stay NO_EVIDENCE.
+- A quiet commit is proven by a `git log --oneline` line with the same subject; an older commit with an
+  identical subject could confirm a commit that did not happen.
+- Hooks have simulated stdin tests, not a live-host acceptance test. macOS/Linux launchers are not verified.
 - Actual five-day usage metrics remain pending. The Phase 0 sample contains no
   verified negative examples; recall cannot be established from that sample.
 - Logs/report writes can conflict across simultaneous invocations; run a single

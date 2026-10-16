@@ -43,7 +43,19 @@ replacement file. Replace the example checkout path with the local checkout.
 }
 ```
 
+For macOS/Linux, or any system where Agent Receipts was installed with pipx/uv, use one of:
+
+```json
+{ "type": "command", "command": "sh /path/to/agent-receipts/receipts-hook.sh --source claude", "timeout": 10 }
+```
+
+```json
+{ "type": "command", "command": "sh -c 'receipts hook --source claude || true'", "timeout": 10 }
+```
+
+The `|| true` keeps the hook fail-open when the `receipts` command is missing. Hook messages follow `RECEIPTS_LANG`.
+
 For Claude use `--source claude`. Preserve the original registry and make a local
 backup first. Registration is optional; `audit` and `check-diff` work without it.
 The watcher never installs a model or makes API calls. Advisory results are written
-to `reports/hook.log`; inspect them during the five-working-day pilot.
+to `hook.log` in the report directory (see README); inspect them during the five-working-day pilot.

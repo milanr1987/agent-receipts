@@ -1,10 +1,12 @@
 # Agent Receipts
 
-Read README.md and docs/superpowers/specs/2026-10-15-portable-dual-agent-design.md.
-Plan: docs/superpowers/plans/2026-10-15-agent-receipts-implementation.md.
+Read README.md and docs/superpowers/specs/2026-10-16-v0.2-real-data-accuracy-design.md
+(earlier: 2026-10-15-portable-dual-agent-design.md).
+Plan: docs/superpowers/plans/2026-10-16-v0.2-real-data-accuracy.md.
 Work only in this checkout. Do not modify Archify or other scanned projects.
 
-Python 3.12+, standard library only. Run setup.cmd, then use .venv/Scripts/python.exe.
+Python 3.12+, standard library only at runtime. Run setup.cmd (Windows) or setup.sh (macOS/Linux).
+User-facing text lives in src/receipts/messages.py (en and bs); add both when adding a message.
 Tests: set PYTHONPATH to this checkout's src and run python -m unittest discover
 -s tests -p "test_*.py" -v. Git tests require Git on PATH or RECEIPTS_GIT.
 
