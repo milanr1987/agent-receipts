@@ -102,6 +102,26 @@ class ClaimsTests(unittest.TestCase):
 
 
 class EvidenceTests(unittest.TestCase):
+    def test_failed_exit_without_runner_output_is_no_evidence(self):
+        self.assertEqual(verdict('cd /nope && pytest', 'cd: /nope: No such file or directory', exit_code=1).status, 'NO_EVIDENCE')
+        self.assertEqual(verdict('pytest', 'ModuleNotFoundError: No module named x', exit_code=1).status, 'NO_EVIDENCE')
+        self.assertEqual(verdict('pytest', '1 failed, 2 passed in 0.3s', exit_code=1).status, 'CONTRADICTED')
+
+    def test_sourcing_a_script_is_not_setup(self):
+        out = 'build: 3 errors\n=== 5 passed in 0.2s ===\n'
+        self.assertEqual(verdict('source ./run_all.sh && pytest', out, exit_code=0).status, 'CONFIRMED')
+        self.assertEqual(verdict('source .venv/bin/activate && pytest', '1 failed', exit_code=1).status, 'CONTRADICTED')
+
+    def test_pytest_count_ignores_js_tests_line(self):
+        out = '=== 10 passed in 0.2s ===\n      Tests  95 passed (95)\n'
+        self.assertEqual(verdict('pytest -q', out, 'All 10 tests pass').status, 'CONFIRMED')
+
+    def test_conversation_only_flag(self):
+        chat = (event('assistant_text', 'All tests pass', 1, turn='c'),)
+        v = evaluate(Session('codex', 's', chat), extract_claims(chat))[0]
+        self.assertTrue(v.conversation_only)
+        self.assertFalse(verdict('pytest', 'unknown', exit_code=None).conversation_only)
+
     def test_pass_fail_and_unknown(self):
         self.assertEqual(verdict('python -m unittest', 'Ran 2 tests\nOK').status, 'CONFIRMED')
         self.assertEqual(verdict('pytest', '1 failed', exit_code=1).status, 'CONTRADICTED')

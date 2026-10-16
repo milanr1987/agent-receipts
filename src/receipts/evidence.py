@@ -14,7 +14,7 @@ SUMMARY_RE = {
                          r'|^\s*(?:\d+ \w+, )*\d+ (?:passed|failed|errors?)\b[^\n]* in [\d.]+s\b[^\n]*$'),
     'vitest': JS_TESTS_RE, 'jest': JS_TESTS_RE, 'npm': JS_TESTS_RE,
 }
-SETUP_SEGMENT = re.compile(r'(?i)^(?:(?:cd|pushd|set-location|export|set|source)\s|\.\s+\S*activate|\$env:\w+\s*=|\w+=\S*$)')
+SETUP_SEGMENT = re.compile(r'(?i)^(?:(?:cd|pushd|set-location|export|set)\s|(?:source|\.)\s+\S*activate\b|\$env:\w+\s*=|\w+=\S*$)')
 
 
 def _exit_failed(result):
@@ -59,7 +59,9 @@ def test_counts(name, text):
     elif name in ('vitest', 'jest', 'npm'):
         found = JS_TESTS_RE.findall(text)
     elif name == 'pytest':
-        found = re.findall(r'\b(\d+)\s+passed\b', text)
+        # A vitest/jest "Tests N passed" line in the same output is not a pytest count.
+        found = [m for line in text.splitlines() if not re.match(r'\s*Tests\b', line)
+                 for m in re.findall(r'\b(\d+)\s+passed\b', line)]
     else:
         found = []
     return [int(n) for n in found]
@@ -103,7 +105,9 @@ def _test_verdict(claim, call, result):
     else:
         text = result.text
         if _failed(result):
-            return 'CONTRADICTED', proof
+            # A non-zero exit with no runner output means the tests never ran (bad cd, import error).
+            ran = FAIL_RE.search(text) or runner_summary(name, text) or test_counts(name, text)
+            return ('CONTRADICTED' if ran else 'NO_EVIDENCE'), proof
         if not _successful(result, tests=True):
             return 'NO_EVIDENCE', proof
     return _check_counts(claim, name, text), proof
@@ -111,6 +115,7 @@ def _test_verdict(claim, call, result):
 
 def evaluate(session, claims):
     verdicts = []
+    busy_turns = {e.turn for e in session.events if e.kind == 'tool_call'}
     for claim in claims:
         preceding = [e for e in session.events if e.line < claim.event.line]
         # Events can share a JSONL line (Claude blocks). Earlier block order still matters.
@@ -164,5 +169,5 @@ def evaluate(session, claims):
                         path = path.replace('\\', '/')
                         if (path == wanted or path.endswith('/' + wanted)) and action == 'add':
                             status, proof = 'CONFIRMED', (t('proof_created', line=result.line),)
-        verdicts.append(Verdict(claim, status, proof))
+        verdicts.append(Verdict(claim, status, proof, claim.event.turn not in busy_turns))
     return tuple(verdicts)

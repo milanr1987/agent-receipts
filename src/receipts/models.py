@@ -50,6 +50,7 @@ class Verdict:
     claim: Claim
     status: str
     evidence: tuple[str, ...]
+    conversation_only: bool = False
 
 
 @dataclass(frozen=True)
