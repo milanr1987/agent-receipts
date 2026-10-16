@@ -1,4 +1,5 @@
 from .common import read_rows
+from ..messages import t
 
 
 def detect(path):
@@ -11,4 +12,4 @@ def detect(path):
             return 'codex'
         if kind in ('assistant', 'user') and isinstance(row.get('message'), dict):
             return 'claude'
-    raise ValueError('Nepoznat ili nepotpun format sesije; audit nije potvrđen.')
+    raise ValueError(t('unknown_format'))

@@ -2,6 +2,7 @@ import ast
 from pathlib import PurePosixPath
 import re
 from .models import Finding
+from .messages import t
 
 
 def is_test(path):
@@ -16,7 +17,7 @@ def _functions(text):
     try:
         tree = ast.parse(text)
     except (SyntaxError, RecursionError) as error:
-        raise ValueError('Python test nije moguće parsirati; rezultat je nepotpun.') from error
+        raise ValueError(t('testguard_parse')) from error
     found = {}
 
     def visit(node, scope=''):

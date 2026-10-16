@@ -1,6 +1,7 @@
 import re
 from pathlib import PurePosixPath
 from .claims import runner, git_operation
+from .messages import t
 from .models import Verdict
 
 
@@ -33,7 +34,7 @@ def evaluate(session, claims):
             pass
         calls = {e.tool_id: e for e in preceding if e.kind == 'tool_call'}
         results = [e for e in preceding if e.kind == 'tool_result']
-        status, proof = 'NO_EVIDENCE', ('Nema dovoljnog prethodnog dokaza.',)
+        status, proof = 'NO_EVIDENCE', (t('no_evidence'),)
         if claim.type == 'tests_pass':
             test_calls = [e for e in preceding if e.kind == 'tool_call' and e.turn == claim.event.turn and runner(e.text)]
             scopes = re.findall(r'(?i)\b(?:backend|frontend)\b', claim.quote)
@@ -58,14 +59,14 @@ def evaluate(session, claims):
                                 status = 'CONTRADICTED'
                         if skips and int(skips[1]) and re.search(r'(?i)without skips|no skips|bez preskakanja', claim.quote):
                             status = 'CONTRADICTED'
-                    proof = (f'line {call.line}: runner {runner(call.text)}; line {result.line}: exit={result.exit_code}, status={result.status}',)
+                    proof = (t('proof_runner', call=call.line, runner=runner(call.text), result=result.line, exit=result.exit_code, source='', status=result.status),)
         elif claim.type in ('committed', 'pushed'):
             operation = 'commit' if claim.type == 'committed' else 'push'
             for result in reversed(results):
                 call = calls.get(result.tool_id)
                 if not call or not git_operation(call.text, operation):
                     continue
-                proof = (f'line {call.line}: git {operation}; line {result.line}: exit={result.exit_code}. Istorijski rezultat; trenutno stanje nije provjereno.',)
+                proof = (t('proof_git', call=call.line, op=operation, result=result.line, exit=result.exit_code, source=''),)
                 if _failed(result):
                     status = 'CONTRADICTED'
                 elif result.exit_code == 0 and result.status == 'completed':
@@ -81,13 +82,13 @@ def evaluate(session, claims):
             if claim.type == 'files_changed':
                 if len(paths) >= int(claim.value or 0) and paths:
                     status = 'CONFIRMED'
-                proof = (f'Zabilježeno {len(paths)} različitih uspješno izmijenjenih putanja; nepotpun inventar nije dokaz neistine.',)
+                proof = (t('proof_files', n=len(paths)),)
             else:
                 wanted = (claim.value or '').replace('\\', '/')
                 for result in successful:
                     for path, action in result.file_actions:
                         path = path.replace('\\', '/')
                         if (path == wanted or path.endswith('/' + wanted)) and action == 'add':
-                            status, proof = 'CONFIRMED', (f'line {result.line}: uspješno kreiranje fajla.',)
+                            status, proof = 'CONFIRMED', (t('proof_created', line=result.line),)
         verdicts.append(Verdict(claim, status, proof))
     return tuple(verdicts)

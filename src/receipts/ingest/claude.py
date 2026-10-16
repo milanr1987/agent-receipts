@@ -1,6 +1,7 @@
 import re
 from ..models import Event, Session, Diagnostic
 from ..redaction import redact
+from ..messages import t
 from .common import read_rows, text_content
 
 
@@ -45,7 +46,7 @@ def parse(path):
             elif typ == 'tool_result':
                 iid = block.get('tool_use_id')
                 if iid not in calls:
-                    diagnostics.append(Diagnostic('orphan_result', number, 'Rezultat bez povezanog poziva.'))
+                    diagnostics.append(Diagnostic('orphan_result', number, t('diag_orphan_result')))
                     continue
                 name, files, call_turn = calls[iid]
                 text = text_content(block.get('content', ''))

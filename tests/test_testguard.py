@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from receipts.testguard import compare_versions
 from receipts.git_read import run_git, changed_versions
@@ -104,5 +105,5 @@ class GitTests(unittest.TestCase):
 
     def test_git_timeout_is_explicit(self):
         with tempfile.TemporaryDirectory() as d:
-            with self.assertRaisesRegex(ValueError,'istekla'):
+            with self.assertRaisesRegex(ValueError,'timed out'),patch.dict(os.environ,{'RECEIPTS_LANG':''}):
                 run_git(Path(d),['rev-parse','HEAD'],timeout=0)

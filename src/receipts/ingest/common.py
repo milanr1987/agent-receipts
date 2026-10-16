@@ -1,5 +1,6 @@
 import json
 from ..models import Diagnostic
+from ..messages import t
 
 
 def read_rows(path, max_line=8 * 1024 * 1024, max_file=256 * 1024 * 1024):
@@ -7,7 +8,7 @@ def read_rows(path, max_line=8 * 1024 * 1024, max_file=256 * 1024 * 1024):
     try:
         size = path.stat().st_size
         if size > max_file:
-            return [], [Diagnostic('file_limit', 0, 'Sesija prelazi dozvoljenu veličinu.')]
+            return [], [Diagnostic('file_limit', 0, t('diag_file_limit'))]
         with path.open('rb') as stream:
             remaining, number = size, 0
             while remaining > 0:
@@ -15,7 +16,7 @@ def read_rows(path, max_line=8 * 1024 * 1024, max_file=256 * 1024 * 1024):
                 remaining -= len(raw)
                 number += 1
                 if len(raw) > max_line:
-                    diagnostics.append(Diagnostic('line_limit', number, 'Red sesije je prevelik; audit nepotpun.'))
+                    diagnostics.append(Diagnostic('line_limit', number, t('diag_line_limit')))
                     break
                 try:
                     row = json.loads(raw.decode('utf-8-sig'))
@@ -23,9 +24,9 @@ def read_rows(path, max_line=8 * 1024 * 1024, max_file=256 * 1024 * 1024):
                         raise ValueError()
                     rows.append((number, row))
                 except (ValueError, UnicodeError):
-                    diagnostics.append(Diagnostic('invalid_json', number, 'Neispravan ili nedovršen JSON red.'))
+                    diagnostics.append(Diagnostic('invalid_json', number, t('diag_invalid_json')))
     except OSError:
-        diagnostics.append(Diagnostic('read_error', 0, 'Sesija nije dostupna za čitanje.'))
+        diagnostics.append(Diagnostic('read_error', 0, t('diag_read_error')))
     return rows, diagnostics
 
 

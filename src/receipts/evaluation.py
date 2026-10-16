@@ -4,6 +4,7 @@ from .claims import extract_claims
 from .evidence import evaluate
 from .ingest.detect import detect
 from .ingest import claude, codex
+from .messages import t
 
 
 def evaluate_labels(path):
@@ -11,7 +12,7 @@ def evaluate_labels(path):
     with Path(path).open(encoding='utf-8-sig', newline='') as stream:
         for row in csv.DictReader(stream):
             if row.get('truth') not in ('true', 'false'):
-                raise ValueError('Svaka labela mora imati ručno provjeren truth=true/false.')
+                raise ValueError(t('eval_truth'))
             file = Path(row['session_path']).expanduser()
             if not file.is_absolute():
                 file = Path(path).resolve().parent / file
@@ -22,7 +23,7 @@ def evaluate_labels(path):
                 cache[key] = (source, evaluate(session, extract_claims(session.events)))
             source, verdicts = cache[key]
             if source != row.get('source'):
-                raise ValueError('Izvor labele ne odgovara sesiji.')
+                raise ValueError(t('eval_source'))
             matched = [v for v in verdicts if v.claim.type == row['claim_type'] and v.claim.event.line == int(row['line'])]
             flagged = any(v.status != 'CONFIRMED' for v in matched)
             actual = row['truth'] == 'false'

@@ -3,6 +3,7 @@ from pathlib import Path
 import os
 import re
 from .ingest.common import read_rows
+from .messages import t
 
 
 def parse_since(value):
@@ -10,7 +11,7 @@ def parse_since(value):
         return None
     match = re.fullmatch(r'(\d+)([dh])', value)
     if not match:
-        raise ValueError('Koristite trajanje poput 7d ili 24h.')
+        raise ValueError(t('bad_since'))
     return datetime.now(timezone.utc) - timedelta(**{'days' if match[2] == 'd' else 'hours': int(match[1])})
 
 
@@ -32,7 +33,7 @@ def discover(home, source='all', since=None, profile=None, project=None):
         roots.append(codex_home / 'sessions')
     if source in ('all', 'claude'):
         if profile and profile not in ('.claude', '.claude-max', '.claude-pro'):
-            raise ValueError('Nepoznat Claude profil.')
+            raise ValueError(t('unknown_profile', name=profile))
         roots.extend(home / name / 'projects' for name in ([profile] if profile else ['.claude', '.claude-max', '.claude-pro']))
         if not profile and os.environ.get('CLAUDE_CONFIG_DIR'):
             roots.append(Path(os.environ['CLAUDE_CONFIG_DIR']) / 'projects')

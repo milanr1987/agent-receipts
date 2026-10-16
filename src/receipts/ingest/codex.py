@@ -1,6 +1,7 @@
 import json
 from ..models import Event, Session, Diagnostic
 from ..redaction import redact
+from ..messages import t
 from .common import read_rows, text_content
 
 
@@ -20,7 +21,7 @@ def parse(path):
     for number, row in rows:
         payload = row.get('payload', {})
         if not isinstance(payload, dict):
-            diagnostics.append(Diagnostic('invalid_payload', number, 'Neispravna struktura događaja.'))
+            diagnostics.append(Diagnostic('invalid_payload', number, t('diag_invalid_payload')))
             continue
         if row.get('type') == 'session_meta':
             session_id = str(payload.get('id', session_id))
@@ -41,7 +42,7 @@ def parse(path):
             if typ == 'item_completed':
                 item = payload.get('item', {})
                 if not isinstance(item, dict):
-                    diagnostics.append(Diagnostic('invalid_item', number, 'Neispravna struktura stavke.'))
+                    diagnostics.append(Diagnostic('invalid_item', number, t('diag_invalid_item')))
                     continue
                 typ, iid = item.get('type'), str(item.get('id', number))
                 if iid in ids:
@@ -63,12 +64,12 @@ def parse(path):
                     actions = []
                     changes = item.get('changes', {})
                     if not isinstance(changes, dict):
-                        diagnostics.append(Diagnostic('invalid_changes', number, 'Neispravna struktura promjena.'))
+                        diagnostics.append(Diagnostic('invalid_changes', number, t('diag_invalid_changes')))
                         continue
                     for name, action in changes.items():
                         action = action.get('type', 'unknown') if isinstance(action, dict) else str(action)
                         if not isinstance(action, str):
-                            diagnostics.append(Diagnostic('invalid_action', number, 'Nepoznat tip izmjene fajla.'))
+                            diagnostics.append(Diagnostic('invalid_action', number, t('diag_invalid_action')))
                             action = 'unknown'
                         actions.append((name, action.lower()))
                     emit('tool_result', '', 'file_change', iid, files=tuple(n for n, _ in actions),
@@ -102,7 +103,7 @@ def parse(path):
                         emit('tool_call', str(cmd), 'command', iid)
                         fallback_ids.add(iid)
                     except (ValueError, AttributeError, TypeError):
-                        diagnostics.append(Diagnostic('unsupported_call', number, 'Poziv alata nije pouzdano dekodiran.'))
+                        diagnostics.append(Diagnostic('unsupported_call', number, t('diag_unsupported_call')))
             elif typ in ('function_call_output', 'custom_tool_call_output'):
                 if iid not in fallback_ids:
                     continue
@@ -116,7 +117,7 @@ def parse(path):
                          status='completed' if type(code) is int else 'unknown',
                          is_error=code != 0 if type(code) is int else None)
                 except (ValueError, TypeError):
-                    diagnostics.append(Diagnostic('unsupported_result', number, 'Rezultat alata nije pouzdano dekodiran.'))
+                    diagnostics.append(Diagnostic('unsupported_result', number, t('diag_unsupported_result')))
             elif typ == 'message' and payload.get('role') == 'assistant':
                 text = text_content(payload.get('content', []))
                 if (turn,text) not in finals:

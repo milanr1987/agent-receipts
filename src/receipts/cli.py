@@ -11,24 +11,46 @@ from .ingest.detect import detect
 from .ingest import claude, codex
 from . import report
 from .redaction import redact
+from .messages import MESSAGES, set_lang, t
+
+
+def _language(argv):
+    pre = argparse.ArgumentParser(add_help=False)
+    pre.add_argument('--lang')
+    known, _ = pre.parse_known_args(argv)
+    return known.lang
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(prog='receipts', description='Lokalni audit dokaza: audit, check-diff, eval, hook.')
+    try:
+        set_lang(_language(argv))
+    except ValueError as error:
+        print(str(error), file=sys.stderr)
+        return 2
+    try:
+        return _run(argv)
+    finally:
+        set_lang(None)
+
+
+def _run(argv):
+    lang_opt = argparse.ArgumentParser(add_help=False)
+    lang_opt.add_argument('--lang', choices=sorted(MESSAGES), default=argparse.SUPPRESS, help=t('help_lang'))
+    parser = argparse.ArgumentParser(prog='receipts', description=t('cli_description'), parents=[lang_opt])
     parser.add_argument('--version', action='version', version=__version__)
     commands = parser.add_subparsers(dest='action')
-    audit = commands.add_parser('audit', help='Pregled lokalnih sesija')
+    audit = commands.add_parser('audit', help=t('help_audit'), parents=[lang_opt])
     audit.add_argument('session', nargs='?')
     audit.add_argument('--since', default='7d')
     audit.add_argument('--source', choices=['all','claude','codex'], default='all')
     audit.add_argument('--profile')
     audit.add_argument('--project', type=Path)
-    diff = commands.add_parser('check-diff', help='Signali slabljenja testova')
+    diff = commands.add_parser('check-diff', help=t('help_diff'), parents=[lang_opt])
     diff.add_argument('--project', type=Path, default=Path.cwd())
     diff.add_argument('--base', default='HEAD')
-    evaluation = commands.add_parser('eval', help='Metrika nad ručnim labelama')
+    evaluation = commands.add_parser('eval', help=t('help_eval'), parents=[lang_opt])
     evaluation.add_argument('labels', type=Path)
-    hook = commands.add_parser('hook', help='Opcionalni warning-only hook')
+    hook = commands.add_parser('hook', help=t('help_hook'), parents=[lang_opt])
     hook.add_argument('--source', required=True, choices=['codex','claude'])
     args = parser.parse_args(argv)
     try:
@@ -44,7 +66,7 @@ def main(argv=None):
                 incomplete |= any(d.code != 'mirror_suppressed' for d in session.diagnostics)
                 results.append((session,evaluate(session,extract_claims(session.events))))
             output = report.save_report(report.render_report(results))
-            print(redact(f'Izvještaj: {output}; sesija: {len(results)}'))
+            print(redact(t('report_saved', path=output, n=len(results))))
             if incomplete or not results:
                 return 2
             return int(any(v.status != 'CONFIRMED' for _, verdicts in results for v in verdicts))
@@ -69,7 +91,7 @@ def main(argv=None):
         parser.print_help()
         return 0
     except (ValueError,OSError,TypeError,KeyError) as error:
-        print(redact('Provjera nije završena: ' + str(error)),file=sys.stderr)
+        print(redact(t('check_incomplete', error=error)),file=sys.stderr)
         return 2
 
 

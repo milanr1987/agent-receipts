@@ -7,6 +7,7 @@ from .claims import extract_claims, runner
 from .ingest import codex, claude
 from .ingest.detect import detect
 from .models import Event
+from .messages import t
 from . import report
 from .redaction import redact
 
@@ -54,7 +55,7 @@ def handle_hook(source, payload):
         warnings = []
         if final_event and any(c.type == 'tests_pass' for c in extract_claims([final_event])):
             if not any(e.kind == 'tool_call' and runner(e.text) for e in events):
-                warnings.append('Tvrdnja o prolasku testova nema poziv test runnera u ovom potezu.')
+                warnings.append(t('hook_no_runner'))
         project = Path(cwd)
         if project.is_dir():
             try:
@@ -63,16 +64,16 @@ def handle_hook(source, payload):
                 findings = [f for version in changed_versions(project) for f in
                             compare_versions(version.path,version.old,version.new)]
                 if findings:
-                    warnings.append(f'Signali slabljenja testova: {len(findings)}; potreban je pregled i objašnjenje.')
+                    warnings.append(t('hook_weakening', n=len(findings)))
             except ValueError:
-                _log('Git/testguard provjera nije dostupna; potez je propušten.')
+                _log(t('hook_git_unavailable'))
         if warnings:
-            message = 'Agent Receipts (upozorenje): ' + ' '.join(warnings)
+            message = t('hook_prefix') + ' '.join(warnings)
             _log(message)
             return message
         return None
     except Exception:
-        _log('Hook provjera nije završena (nepoznat format ili identitet); potez je propušten.')
+        _log(t('hook_unknown'))
         return None
 
 
@@ -89,5 +90,5 @@ def run_hook(source):
             # Both documented protocols accept systemMessage; no decision:block.
             print(json.dumps({'systemMessage': warning},ensure_ascii=False))
     except Exception:
-        _log('Neispravan hook ulaz; potez je propušten.')
+        _log(t('hook_bad_input'))
     return 0
