@@ -18,6 +18,7 @@ class Event:
     timestamp: str | None = None
     status: str | None = None
     file_actions: tuple[tuple[str, str], ...] = ()
+    exit_source: str | None = None
 
 
 @dataclass(frozen=True)

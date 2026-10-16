@@ -14,12 +14,17 @@ def _failed(result):
 def _successful(result, tests=False):
     if _failed(result) or result.status not in ('completed', 'success'):
         return False
-    if result.exit_code == 0:
+    # The host success flag proves the shell exited 0, not that a runner reported a pass.
+    if result.exit_code == 0 and not (tests and result.exit_source == 'host_success_flag'):
         return True
     if tests:
         return bool(re.search(r'(?im)^OK(?:\s|$)|\b\d+\s+passed\b|test result: ok', result.text))
     # Successful edit/write tool_result (not Bash) has a reliable tool success flag.
     return result.tool_name in ('Write', 'Edit', 'MultiEdit') and result.is_error is False
+
+
+def _source(result):
+    return f' [{result.exit_source}]' if result.exit_source else ''
 
 
 def evaluate(session, claims):
@@ -59,14 +64,14 @@ def evaluate(session, claims):
                                 status = 'CONTRADICTED'
                         if skips and int(skips[1]) and re.search(r'(?i)without skips|no skips|bez preskakanja', claim.quote):
                             status = 'CONTRADICTED'
-                    proof = (t('proof_runner', call=call.line, runner=runner(call.text), result=result.line, exit=result.exit_code, source='', status=result.status),)
+                    proof = (t('proof_runner', call=call.line, runner=runner(call.text), result=result.line, exit=result.exit_code, source=_source(result), status=result.status),)
         elif claim.type in ('committed', 'pushed'):
             operation = 'commit' if claim.type == 'committed' else 'push'
             for result in reversed(results):
                 call = calls.get(result.tool_id)
                 if not call or not git_operation(call.text, operation):
                     continue
-                proof = (t('proof_git', call=call.line, op=operation, result=result.line, exit=result.exit_code, source=''),)
+                proof = (t('proof_git', call=call.line, op=operation, result=result.line, exit=result.exit_code, source=_source(result)),)
                 if _failed(result):
                     status = 'CONTRADICTED'
                 elif result.exit_code == 0 and result.status == 'completed':

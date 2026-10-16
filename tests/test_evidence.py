@@ -1,17 +1,21 @@
+from pathlib import Path
 import unittest
 from receipts.models import Event, Session
 from receipts.claims import extract_claims, runner
 from receipts.evidence import evaluate
+from receipts.ingest import claude
+
+FIXTURES = Path(__file__).resolve().parent / 'fixtures'
 
 
 def event(kind, text, line, **kwargs):
     return Event('codex', 's', '/project', line, kwargs.pop('turn', 't'), kind, text, **kwargs)
 
 
-def verdict(command, output, claim='All tests pass', exit_code=0, result_turn='t', **kwargs):
+def verdict(command, output, claim='All tests pass', exit_code=0, result_turn='t', exit_source=None, **kwargs):
     events = (event('tool_call', command, 1, tool_id='x', tool_name='command'),
               event('tool_result', output, 2, tool_id='x', tool_name='command', exit_code=exit_code,
-                    status='completed', turn=result_turn),
+                    status='completed', turn=result_turn, exit_source=exit_source),
               event('assistant_text', claim, 3, **kwargs))
     session = Session('codex', 's', events)
     return evaluate(session, extract_claims(events))[0]
@@ -104,3 +108,17 @@ class EvidenceTests(unittest.TestCase):
                 self.assertEqual(verdict(cmd,'',exit_code=0).status,'NO_EVIDENCE')
         self.assertEqual(verdict('git push --dry-run origin main','main -> main','I pushed the changes').status,'NO_EVIDENCE')
         self.assertEqual(verdict('git push -nv origin main','main -> main','I pushed the changes').status,'NO_EVIDENCE')
+
+
+class ClaudeFixtureTests(unittest.TestCase):
+    def test_claude_commit_and_tests_confirmed(self):
+        session = claude.parse(FIXTURES / 'claude-2.1.300.jsonl')
+        verdicts = evaluate(session, extract_claims(session.events))
+        statuses = {v.claim.type: v.status for v in verdicts}
+        self.assertEqual(statuses['committed'], 'CONFIRMED')
+        self.assertEqual(statuses['tests_pass'], 'CONFIRMED')
+        self.assertIn('host_success_flag', ' '.join(next(v for v in verdicts if v.claim.type == 'committed').evidence))
+
+    def test_host_flag_alone_does_not_prove_tests(self):
+        self.assertEqual(verdict('pytest', 'collected 0 items', exit_code=0, exit_source='host_success_flag').status, 'NO_EVIDENCE')
+        self.assertEqual(verdict('pytest', '2 passed', exit_code=0, exit_source='host_success_flag').status, 'CONFIRMED')

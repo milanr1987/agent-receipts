@@ -52,15 +52,24 @@ def parse(path):
                 text = text_content(block.get('content', ''))
                 match = re.search(r'(?im)^\s*(?:Exit code|Process exited with code)\s*:?\s*(-?\d+)\s*$', text)
                 code = int(match[1]) if match else None
+                exit_source = 'explicit' if match else None
                 failed = block.get('is_error') is True or (code is not None and code != 0)
                 extra = row.get('toolUseResult')
                 if isinstance(extra, dict) and extra.get('interrupted'):
                     failed = True
+                status = 'failed' if failed else 'completed'
+                if not failed and isinstance(extra, dict) and extra.get('backgroundTaskId'):
+                    # run_in_background returns before the command finishes.
+                    status = 'running'
+                elif (code is None and not failed and name in ('Bash', 'PowerShell')
+                      and isinstance(extra, dict) and extra.get('interrupted') is False):
+                    # Claude Code sets is_error on a non-zero exit and omits the code on success.
+                    code, exit_source = 0, 'host_success_flag'
                 # Associate with original call even if late results arrive after another human turn.
                 old_turn = turn
                 turn = int(call_turn)
-                emit('tool_result', text, name, iid, files=files, exit_code=code,
-                     status='failed' if failed else 'completed', is_error=failed,
+                emit('tool_result', text, name, iid, files=files, exit_code=code, exit_source=exit_source,
+                     status=status, is_error=failed,
                      file_actions=tuple((p, 'add' if name == 'Write' else 'update') for p in files))
                 turn = old_turn
     return Session('claude', session_id, tuple(events), tuple(diagnostics))

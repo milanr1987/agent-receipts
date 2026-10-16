@@ -110,6 +110,31 @@ class CodexTests(unittest.TestCase):
 
 
 class ClaudeTests(unittest.TestCase):
+    def bash(self, result, extra, command='git commit -m fix'):
+        return parse_rows(claude.parse, [
+            {'type':'user','sessionId':'s','cwd':'/p','message':{'content':'go'}},
+            {'type':'assistant','message':{'content':[{'type':'tool_use','id':'a','name':'Bash','input':{'command':command}}]}},
+            {'type':'user','toolUseResult':extra,'message':{'content':[dict({'type':'tool_result','tool_use_id':'a'},**result)]}}]).events[-1]
+
+    def test_host_success_flag_sets_exit_zero(self):
+        r=self.bash({'content':'[main abc1234] fix','is_error':False},{'stdout':'[main abc1234] fix','stderr':'','interrupted':False})
+        self.assertEqual((r.exit_code,r.exit_source,r.status),(0,'host_success_flag','completed'))
+
+    def test_explicit_exit_code_wins(self):
+        r=self.bash({'content':'out\nExit code 0','is_error':False},{'stdout':'out','interrupted':False})
+        self.assertEqual((r.exit_code,r.exit_source),(0,'explicit'))
+
+    def test_error_and_interrupt_not_success(self):
+        r=self.bash({'content':'Exit code 1\nfatal','is_error':True},'Error: Exit code 1')
+        self.assertEqual((r.exit_code,r.status,r.is_error),(1,'failed',True))
+        r=self.bash({'content':'partial','is_error':False},{'stdout':'partial','interrupted':True})
+        self.assertEqual((r.exit_code,r.status),(None,'failed'))
+
+    def test_background_bash_is_running_not_success(self):
+        r=self.bash({'content':'Command running in background with ID: bg1','is_error':False},
+                    {'stdout':'','interrupted':False,'backgroundTaskId':'bg1'})
+        self.assertEqual((r.exit_code,r.status),(None,'running'))
+
     def test_null_tool_use_result_safe(self):
         s=parse_rows(claude.parse,[
             {'type':'assistant','message':{'content':[{'type':'tool_use','id':'a','name':'Bash','input':{'command':'pytest'}}]}},
