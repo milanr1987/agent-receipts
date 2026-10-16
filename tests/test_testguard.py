@@ -125,6 +125,23 @@ class GitTests(unittest.TestCase):
             self.assertEqual(findings,[])
             self.assertFalse([c for c in calls if c[0] in ('diff','ls-files')])
 
+    def test_hook_finds_weakening_in_mixed_case_and_non_ascii_names(self):
+        from receipts import hook
+        from receipts.models import Event
+        with tempfile.TemporaryDirectory() as d:
+            root,p=self.make_repo(d)
+            (root/'tests').mkdir()
+            names=['tests/Test_B.py','tests/Test_Ünï.py']
+            for n in names:
+                (root/n).write_text('def test_x():\n assert 1\n assert 2\n',encoding='utf-8')
+            subprocess.run([self.git,'-C',str(root),'add','.'],capture_output=True)
+            subprocess.run([self.git,'-C',str(root),'commit','-m','more'],capture_output=True)
+            for n in names:
+                (root/n).write_text('def test_x():\n assert 1\n',encoding='utf-8')
+                events=[Event('claude','s',str(root),1,'t','tool_call','x',tool_name='Edit',files=(str(root/n),))]
+                touched=hook.touched_paths(events,str(root))
+                self.assertEqual(len(hook.weakening_findings(root,touched)),1,n)
+
     def test_staged_unstaged_and_index_unchanged(self):
         with tempfile.TemporaryDirectory() as d:
             root,p=self.make_repo(d)

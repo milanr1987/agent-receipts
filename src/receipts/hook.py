@@ -34,12 +34,18 @@ def _norm(path):
     return os.path.normcase(os.path.realpath(path)).replace('\\', '/')
 
 
+def _real(path):
+    return os.path.realpath(path).replace('\\', '/')
+
+
 def touched_paths(events, cwd):
-    paths = set()
+    """Normalized touched path -> the same path in its real case (Git pathspecs are case-sensitive)."""
+    paths = {}
     for e in events:
         if e.tool_name in EDIT_TOOLS:
             for p in e.files:
-                paths.add(_norm(p if os.path.isabs(p) else os.path.join(cwd, p)))
+                full = p if os.path.isabs(p) else os.path.join(cwd, p)
+                paths[_norm(full)] = _real(full)
     return paths
 
 
@@ -52,8 +58,11 @@ def weakening_findings(project, touched):
     from .git_read import changed_versions, repo_root
     from .testguard import compare_versions
     top = repo_root(project)
+    originals = touched if isinstance(touched, dict) else {p: p for p in touched}
     prefix = _norm(str(top)).rstrip('/') + '/'
-    rels = sorted(p[len(prefix):] for p in touched if p.startswith(prefix))
+    top_real = _real(str(top)).rstrip('/') + '/'
+    rels = sorted(real[len(top_real):] for norm, real in originals.items()
+                  if norm.startswith(prefix) and len(real) > len(top_real))
     if not rels:
         return []
     return [f for version in changed_versions(top, include=lambda rel: _was_touched(rel, top, touched),

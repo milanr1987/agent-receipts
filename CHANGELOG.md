@@ -7,7 +7,7 @@ Fixed
 - Claims: reported speech and expectation words, a leading "Expected:/Ocekivano:/Example:/Primjer:" label and ALL-CAPS COMMITTED/PUSHED are no longer read as claims.
 - A failed exit without runner output is NO_EVIDENCE; only a venv `activate` counts as setup; the pytest count ignores vitest `Tests` lines.
 - `changed_versions` resolves the repository top level, so a subdirectory cwd works.
-- Hook: testguard runs only on files the agent edited (Write/Edit/MultiEdit, Codex file_change), matched by exact path against the Git top level, case-insensitive on Windows. Git is asked only about those files (literal pathspecs, one top-level lookup).
+- Hook: testguard runs only on files the agent edited (Write/Edit/MultiEdit, Codex file_change), matched by exact path against the Git top level (case-folded on Windows for the match; Git pathspecs keep the real case of the edited path). Git is asked only about those files (literal pathspecs, one top-level lookup).
 - Hook: reads the last 8 MB of the transcript (Codex: plus the session_meta head row), with a full-read fallback.
 
 Added

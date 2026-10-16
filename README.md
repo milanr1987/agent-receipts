@@ -63,7 +63,7 @@ Illustrative layout (the report groups sessions by what needs a look):
 ```text
 ## To review
 
-### my-project · 2026-10-15 12:47 · claude 4f1c0a2b
+### my-project · 2026-03-02 09:15 · claude 4f1c0a2b
 
 | Line | Claim | Status | Evidence |
 |---:|---|---|---|
@@ -73,11 +73,11 @@ Illustrative layout (the report groups sessions by what needs a look):
 
 | Session | Line | Claim |
 |---|---:|---|
-| other-project · 2026-10-14 07:56 · claude b3dbad36 | 1492 | Tests pass |
+| other-project · 2026-03-01 16:30 · claude 7a90c3d1 | 233 | Tests pass |
 
 ## Confirmed - 34
 
-- my-project · 2026-10-15 12:47 · claude 4f1c0a2b: 3 confirmed
+- my-project · 2026-03-02 09:15 · claude 4f1c0a2b: 3 confirmed
 ```
 
 
