@@ -10,7 +10,8 @@ PATTERNS = {
     'file_created': r'\b(?:created|napravio sam fajl|kreirao sam fajl)\s+[`"\x27]?([\w./\\-]+\.[\w]+)',
 }
 EXCLUDE = re.compile(r'(?i)\b(?:will|would|should|must|need to|make sure|if|claims?|asserts?|nije|nisu|not|never|bez dokaza'
-                     r'|going to|once|until|goal|ću|ćeš|će|ćemo|ćete|treba|trebalo|ako|kad|kada|cilj je|da bi)\b')
+                     r'|going to|once|until|goal|ću|ćeš|će|ćemo|ćete|treba|trebalo|ako|kad|kada|cilj je|da bi'
+                     r'|nothing|none|ništa|(?:did|does|do|is|are|was|were|has|have|had)n[\'’]t)\b')
 PATH_TOKEN = re.compile(r'[\w./\\-]+\.\w+')
 
 
@@ -28,7 +29,7 @@ def extract_claims(events):
     for event in events:
         if event.kind != 'assistant_text':
             continue
-        for sentence in re.split(r'[\n!?;]+|(?<=[a-z])\.\s+(?=[A-Z])', strip_non_claims(event.text)):
+        for sentence in re.split(r'[\n!?;]+|(?<=[a-z0-9)])\.\s+(?=[A-ZČĆŠŽĐ])', strip_non_claims(event.text)):
             clean = sentence.replace('**', '').strip()
             if EXCLUDE.search(clean) or re.search(r'["“].*?(?:tests|testovi).*?["”]', clean, re.I):
                 continue

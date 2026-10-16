@@ -48,7 +48,10 @@ class ClaimsTests(unittest.TestCase):
                      'Kad testovi prolaze, commitujem',
                      'Testovi će proći i tada commitovano',
                      'staging ograničavam, commitujem, pa pregledam committed diff',
-                     "I'm going to push once tests pass"]:
+                     "I'm going to push once tests pass",
+                     'Nothing is committed.',
+                     "I didn't open the emails in the preview, and nothing is committed.",
+                     'Your changes pushed: none (nothing local to commit).']:
             with self.subTest(text=text):
                 self.assertEqual(extract_claims([event('assistant_text', text, 1)]), ())
 
@@ -59,6 +62,10 @@ class ClaimsTests(unittest.TestCase):
                           ('Testovi prolaze (56).', 'tests_pass')]:
             with self.subTest(text=text):
                 self.assertIn(typ, [c.type for c in extract_claims([event('assistant_text', text, 1)])])
+
+    def test_sentence_split_after_number(self):
+        text = 'Route boundary je GREEN: 25/25 fokusiranih testova prolazi, a oba daju 502. Prelazim dalje: testovi će koristiti limite.'
+        self.assertEqual([c.type for c in extract_claims([event('assistant_text', text, 1)])], ['tests_pass'])
 
     def test_git_dash_c_recognised(self):
         from receipts.claims import git_operation
@@ -172,6 +179,22 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(verdict('cd "/p" && python -m unittest', 'Ran 2 tests\nOK').status, 'CONFIRMED')
         self.assertEqual(verdict('cd /p && pytest -q', '1 failed', exit_code=1).status, 'CONTRADICTED')
         self.assertEqual(verdict('export X=1; source .venv/bin/activate && pytest', '3 passed').status, 'CONFIRMED')
+
+    def test_compound_pytest_quiet_summary(self):
+        out = '........ [100%]\r\n153 passed in 0.39s\r\n2\n'
+        self.assertEqual(verdict('python -m pytest -q && grep -c x f.py', out, 'Svi testovi prolaze, ukupno 153').status, 'CONFIRMED')
+        self.assertEqual(verdict('pytest -q && echo done', '1 failed, 2 passed in 0.30s\ndone', 'All tests pass').status, 'CONTRADICTED')
+
+    def test_npm_workspaces_sum_test_lines(self):
+        out = '      Tests  121 passed (121)\n...\n      Tests  31 passed (31)\n'
+        self.assertEqual(verdict('npm test', out, 'Svih 152 testa prolaze').status, 'CONFIRMED')
+        self.assertEqual(verdict('npm test', out, 'Svih 160 testa prolaze').status, 'CONTRADICTED')
+
+    def test_quiet_commit_proven_by_log_subject(self):
+        cmd = 'git add a.md && git commit -q -m "docs: plan for atlas" && git log --oneline -2'
+        out = 'warning: LF will be replaced\n40bfb5b docs: plan for atlas\n40efd5f docs: older work\n'
+        self.assertEqual(verdict(cmd, out, 'I committed the plan').status, 'CONFIRMED')
+        self.assertEqual(verdict(cmd, 'warning: LF\n40efd5f docs: older work\n', 'I committed the plan').status, 'NO_EVIDENCE')
 
     def test_git_output_numbers_do_not_contradict_commit(self):
         self.assertEqual(verdict('git commit -m "fix 2 errors"', '[main abc1234] fix 2 errors', 'I committed the fix').status, 'CONFIRMED')

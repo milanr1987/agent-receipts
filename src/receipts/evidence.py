@@ -9,7 +9,9 @@ PASS_RE = re.compile(r'(?im)^OK(?:\s|$)|\b\d+\s+passed\b|test result: ok')
 JS_TESTS_RE = re.compile(r'(?im)^\s*Tests:?\s+(?:\d+\s+\w+,\s*)*(\d+)\s+passed\b[^\n]*')
 SUMMARY_RE = {
     'unittest': re.compile(r'Ran \d+ tests? in [\d.]+s\s+(?:OK|FAILED)[^\n]*'),
-    'pytest': re.compile(r'(?m)^=+ [^\n]*\b(?:passed|failed|errors?)\b[^\n]*=+[ \t]*$'),
+    # Banner "=== 3 passed in 0.1s ===", or the bare "3 passed in 0.1s" line printed by pytest -q.
+    'pytest': re.compile(r'(?m)^=+ [^\n]*\b(?:passed|failed|errors?)\b[^\n]*=+\s*$'
+                         r'|^\s*(?:\d+ \w+, )*\d+ (?:passed|failed|errors?)\b[^\n]* in [\d.]+s\b[^\n]*$'),
     'vitest': JS_TESTS_RE, 'jest': JS_TESTS_RE, 'npm': JS_TESTS_RE,
 }
 SETUP_SEGMENT = re.compile(r'(?i)^(?:(?:cd|pushd|set-location|export|set|source)\s|\.\s+\S*activate|\$env:\w+\s*=|\w+=\S*$)')
@@ -54,12 +56,25 @@ def test_count(name, text):
     if name == 'unittest':
         found = re.findall(r'\bRan\s+(\d+)\s+tests?\b', text)
     elif name in ('vitest', 'jest', 'npm'):
+        # npm workspaces print one "Tests" line per package; the claim counts all of them.
         found = JS_TESTS_RE.findall(text)
+        return sum(int(n) for n in found) if found else None
     elif name == 'pytest':
         found = re.findall(r'\b(\d+)\s+passed\b', text)
     else:
         found = []
     return int(found[-1]) if found else None
+
+
+def _commit_proven(command, output):
+    """Commit summary line, or for `commit -q` a following `git log --oneline` line with the same subject."""
+    if re.search(r'\[[^\]\n]+\s+[0-9a-f]{7,40}\]', output):
+        return True
+    message = re.search(r'''\bcommit\b[^\n]*?\s-[a-zA-Z]*m\s*(["'])([^"'\n$]+)''', command)
+    if not message:
+        return False
+    subject = message[2].strip()[:60]
+    return bool(subject) and bool(re.search(r'(?m)^[0-9a-f]{7,40} ' + re.escape(subject), output))
 
 
 def _check_counts(claim, name, text):
@@ -130,7 +145,7 @@ def evaluate(session, claims):
                 if _exit_failed(result):
                     status = 'CONTRADICTED'
                 elif result.exit_code == 0 and result.status == 'completed':
-                    if operation == 'commit' and re.search(r'\[[^\]\n]+\s+[0-9a-f]{7,40}\]', result.text):
+                    if operation == 'commit' and _commit_proven(call.text, result.text):
                         status = 'CONFIRMED'
                     elif operation == 'push' and re.search(r'(?im)\S+\s+->\s+\S+|Everything up-to-date', result.text):
                         status = 'CONFIRMED'
