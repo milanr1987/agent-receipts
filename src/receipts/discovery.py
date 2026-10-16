@@ -16,7 +16,7 @@ def parse_since(value):
 
 
 def _project_cwd(path):
-    rows, _ = read_rows(path)
+    rows, _ = read_rows(path, max_rows=100)
     for _, row in rows:
         data = row.get('payload', {})
         cwd = row.get('cwd') or (data.get('cwd') if isinstance(data, dict) else None)

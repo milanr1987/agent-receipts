@@ -5,8 +5,9 @@ from ..messages import t
 from .common import read_rows, text_content
 
 
-def parse(path):
-    rows, diagnostics = read_rows(path)
+def parse(path, read=None):
+    rows, diagnostics = read if read is not None else read_rows(path)
+    diagnostics = list(diagnostics)
     session_id, cwd, turn = path.stem, '', 0
     events, calls = [], {}
     for number, row in rows:

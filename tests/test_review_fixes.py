@@ -81,18 +81,18 @@ class ReviewFixTests(unittest.TestCase):
     def test_unreadable_discovered_session_makes_audit_incomplete(self):
         from receipts import report
         from receipts.cli import main
-        from receipts.ingest import detect as detect_module
         with tempfile.TemporaryDirectory() as d:
             home = Path(d)
             good = home / '.codex/sessions/2026/10/16/s.jsonl'; good.parent.mkdir(parents=True); fixture(good)
             huge = home / '.codex/sessions/2026/10/16/huge.jsonl'; huge.write_text('{}', encoding='utf-8')
-            real = detect_module.read_rows
+            from receipts import cli as cli_module
+            real = cli_module.read_rows
 
             def fake_rows(path, *args, **kwargs):
                 if Path(path).name == 'huge.jsonl':
                     return [], [Diagnostic('file_limit', 0, 'too big')]
                 return real(path, *args, **kwargs)
             env = {'CODEX_HOME': str(home / '.codex'), 'CLAUDE_CONFIG_DIR': str(home / '.claude')}
-            with patch.object(detect_module, 'read_rows', fake_rows), patch('pathlib.Path.home', return_value=home), \
+            with patch.object(cli_module, 'read_rows', fake_rows), patch('pathlib.Path.home', return_value=home), \
                     patch.dict(os.environ, env), patch.object(report, 'REPORTS_DIR', home / 'r'), redirect_stdout(io.StringIO()):
                 self.assertEqual(main(['audit', '--since', '1d']), 2)

@@ -4,6 +4,7 @@ import tempfile
 import unittest
 
 from receipts.ingest import codex, claude
+from receipts.ingest.common import read_rows
 from receipts.ingest.detect import detect
 
 
@@ -16,6 +17,52 @@ def parse_rows(parser, rows):
 
 def completed(item, turn='turn1'):
     return {'type': 'event_msg', 'payload': {'type': 'item_completed', 'turn_id': turn, 'item': item}}
+
+
+def write_lines(directory, lines):
+    path = Path(directory) / 's.jsonl'
+    path.write_bytes(b'\n'.join(lines))
+    return path
+
+
+class ReadRowsTests(unittest.TestCase):
+    def test_oversized_line_skipped_and_reading_continues(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = write_lines(d, [b'{"a":1}', b'"' + b'x' * 100 + b'"', b'{"a":3}'])
+            rows, diags = read_rows(p, max_line=20)
+            self.assertEqual([n for n, _ in rows], [1, 3])
+            self.assertEqual([x.code for x in diags], ['line_skipped'])
+
+    def test_partial_last_line_is_not_fatal(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = write_lines(d, [b'{"a":1}', b'{"a":'])
+            rows, diags = read_rows(p)
+            self.assertEqual(len(rows), 1)
+            self.assertEqual([x.code for x in diags], ['invalid_json'])
+
+    def test_tail_window_drops_partial_first_line(self):
+        with tempfile.TemporaryDirectory() as d:
+            lines = [json.dumps({'n': i, 't': 'čćž' * 5}, ensure_ascii=False).encode('utf-8') for i in range(50)]
+            p = write_lines(d, lines)
+            tail = sum(len(x) + 1 for x in lines[-10:]) + 3
+            rows, diags = read_rows(p, tail_bytes=tail)
+            self.assertEqual([r['n'] for _, r in rows], list(range(40, 50)))
+            self.assertEqual(diags, [])
+
+    def test_max_rows_stops_early(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = write_lines(d, [b'{"a":%d}' % i for i in range(10)])
+            rows, _ = read_rows(p, max_rows=3)
+            self.assertEqual(len(rows), 3)
+
+    def test_detect_scans_1000_rows_and_reuses_read(self):
+        with tempfile.TemporaryDirectory() as d:
+            lines = [b'{"type":"summary"}'] * 150 + [b'{"type":"user","message":{"content":"hi"}}']
+            p = write_lines(d, lines)
+            self.assertEqual(detect(p), 'claude')
+            read = ([(1, {'type': 'user', 'message': {'content': 'x'}})], [])
+            self.assertEqual(detect(Path(d) / 'missing.jsonl', read), 'claude')
+            self.assertEqual(claude.parse(Path(d) / 'missing.jsonl', read).events[0].kind, 'user_text')
 
 
 class CodexTests(unittest.TestCase):

@@ -33,8 +33,9 @@ def decode_output(raw):
     return None
 
 
-def parse(path):
-    rows, diagnostics = read_rows(path)
+def parse(path, read=None):
+    rows, diagnostics = read if read is not None else read_rows(path)
+    diagnostics = list(diagnostics)
     session_id, cwd, turn = path.stem, '', '0'
     events, finals, ids = [], set(), set()
     # A primary execution stream suppresses the mirrored response stream. Mixing

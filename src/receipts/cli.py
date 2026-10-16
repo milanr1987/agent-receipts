@@ -10,6 +10,7 @@ from .discovery import discover, parse_since
 from .evidence import evaluate
 from .ingest.detect import FATAL_DIAGNOSTICS, UnreadableSession, detect
 from .ingest import claude, codex
+from .ingest.common import read_rows
 from . import report
 from .redaction import redact
 from .messages import MESSAGES, set_lang, t
@@ -66,8 +67,9 @@ def _run(argv):
                 parse_since(args.since),args.profile,args.project,include_subagents=args.include_subagents)
             results, incomplete, skipped = [], False, 0
             for path in paths:
+                read = read_rows(path)
                 try:
-                    source = detect(path)
+                    source = detect(path, read)
                 except UnreadableSession:
                     if explicit:
                         raise
@@ -80,7 +82,7 @@ def _run(argv):
                     continue
                 if args.source != 'all' and source != args.source:
                     continue
-                session = (codex if source == 'codex' else claude).parse(path)
+                session = (codex if source == 'codex' else claude).parse(path, read)
                 if 'subagents' in path.parts:
                     session = replace(session, subagent=True)
                 incomplete |= any(d.code in FATAL_DIAGNOSTICS for d in session.diagnostics)

@@ -26,6 +26,15 @@ def fixture(path, failed=False, secret=''):
 
 
 class IntegrationTests(unittest.TestCase):
+    def test_huge_line_does_not_make_audit_incomplete(self):
+        from receipts import report
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);path=root/'s.jsonl';fixture(path)
+            with path.open('a',encoding='utf-8') as f:
+                f.write('\n{"type":"response_item","payload":{"type":"message","role":"user","content":"'+'x'*(9*1024*1024)+'"}}')
+            with patch.object(report,'REPORTS_DIR',root/'r'),redirect_stdout(io.StringIO()):
+                self.assertEqual(main(['audit',str(path)]),0)
+
     def test_discovery_missing_and_filters(self):
         with tempfile.TemporaryDirectory() as d:
             home=Path(d)

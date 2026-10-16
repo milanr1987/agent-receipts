@@ -3,21 +3,31 @@ from ..models import Diagnostic
 from ..messages import t
 
 
-def read_rows(path, max_line=8 * 1024 * 1024, max_file=256 * 1024 * 1024):
+def read_rows(path, max_line=8 * 1024 * 1024, max_file=256 * 1024 * 1024, tail_bytes=None, max_rows=None):
+    """Bounded JSONL reader. tail_bytes reads only the end of the file (rows numbered within the window)."""
     rows, diagnostics = [], []
     try:
         size = path.stat().st_size
-        if size > max_file:
+        if tail_bytes is None and size > max_file:
             return [], [Diagnostic('file_limit', 0, t('diag_file_limit'))]
         with path.open('rb') as stream:
-            remaining, number = size, 0
-            while remaining > 0:
-                raw = stream.readline(min(max_line + 1, remaining))
-                remaining -= len(raw)
+            if tail_bytes is not None and size > tail_bytes:
+                stream.seek(size - tail_bytes)
+                stream.readline()  # first line of the window is usually cut in half
+            number = 0
+            while max_rows is None or len(rows) < max_rows:
+                raw = stream.readline(max_line + 1)
+                if not raw:
+                    break
                 number += 1
                 if len(raw) > max_line:
-                    diagnostics.append(Diagnostic('line_limit', number, t('diag_line_limit')))
-                    break
+                    # Skip the rest of the oversized line without loading it; keep reading.
+                    while raw and not raw.endswith(b'\n'):
+                        raw = stream.readline(1024 * 1024)
+                    diagnostics.append(Diagnostic('line_skipped', number, t('diag_line_skipped')))
+                    continue
+                if not raw.strip():
+                    continue
                 try:
                     row = json.loads(raw.decode('utf-8-sig'))
                     if not isinstance(row, dict):
