@@ -1,9 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "agent-receipts"
-version = "0.1.0"
+version = "0.2.0"
 description = "Offline completion evidence auditing for Codex CLI and Claude Code"
+readme = "README.md"
 requires-python = ">=3.12"
 dependencies = []
 
+[project.urls]
+Repository = "https://github.com/milanr1987/agent-receipts"
+
 [project.scripts]
 receipts = "receipts.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
