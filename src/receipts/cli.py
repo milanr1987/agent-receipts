@@ -13,6 +13,8 @@ from . import report
 from .redaction import redact
 from .messages import MESSAGES, set_lang, t
 
+FATAL_DIAGNOSTICS = {'file_limit', 'line_limit', 'read_error'}
+
 
 def _language(argv):
     pre = argparse.ArgumentParser(add_help=False)
@@ -56,19 +58,26 @@ def _run(argv):
     args = parser.parse_args(argv)
     try:
         if args.action == 'audit':
-            paths = (Path(args.session).expanduser(),) if args.session else discover(Path.home(),args.source,
+            explicit = bool(args.session)
+            paths = (Path(args.session).expanduser(),) if explicit else discover(Path.home(),args.source,
                 parse_since(args.since),args.profile,args.project,include_subagents=args.include_subagents)
-            results, incomplete = [], False
+            results, incomplete, skipped = [], False, 0
             for path in paths:
-                source = detect(path)
+                try:
+                    source = detect(path)
+                except ValueError:
+                    if explicit:
+                        raise
+                    skipped += 1
+                    continue
                 if args.source != 'all' and source != args.source:
                     continue
                 session = (codex if source == 'codex' else claude).parse(path)
                 if 'subagents' in path.parts:
                     session = replace(session, subagent=True)
-                incomplete |= any(d.code != 'mirror_suppressed' for d in session.diagnostics)
+                incomplete |= any(d.code in FATAL_DIAGNOSTICS for d in session.diagnostics)
                 results.append((session,evaluate(session,extract_claims(session.events))))
-            output = report.save_report(report.render_report(results))
+            output = report.save_report(report.render_report(results, skipped))
             print(redact(t('report_saved', path=output, n=len(results))))
             if incomplete or not results:
                 return 2

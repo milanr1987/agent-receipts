@@ -11,11 +11,13 @@ def cell(value):
     return redact(str(value)).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('|', '\\|').replace('\n', ' ')
 
 
-def render_report(results):
+def render_report(results, skipped=0):
     lines = ['# Agent Receipts', '', t('report_note'), '']
     counts = Counter((session.source, verdict.status) for session, verdicts in results for verdict in verdicts)
     for source in ('codex', 'claude'):
         lines.append(f'- {source}: CONFIRMED={counts[source,"CONFIRMED"]}, NO_EVIDENCE={counts[source,"NO_EVIDENCE"]}, CONTRADICTED={counts[source,"CONTRADICTED"]}')
+    if skipped:
+        lines += ['', t('report_skipped', n=skipped)]
     if not results:
         lines += ['', t('report_empty')]
     lines += ['', t('report_header'), '|---|---:|---|---|---|']

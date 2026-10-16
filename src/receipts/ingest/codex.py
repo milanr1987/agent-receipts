@@ -1,8 +1,36 @@
 import json
+import re
 from ..models import Event, Session, Diagnostic
 from ..redaction import redact
 from ..messages import t
 from .common import read_rows, text_content
+
+TEXT_EXIT = re.compile(r'\A\s*Exit code:\s*(-?\d+)[ \t]*$', re.M)
+
+
+def decode_output(raw):
+    """Return (exit_code, output, status) for JSON or plain-text command output, or None."""
+    if isinstance(raw, list):
+        raw = text_content(raw)
+    if not isinstance(raw, str):
+        return None
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        data = None
+    if isinstance(data, dict):
+        code = data.get('exit_code')
+        code = code if type(code) is int else None
+        return code, str(data.get('output', '')), 'completed' if code is not None else 'unknown'
+    match = TEXT_EXIT.match(raw)
+    if match:
+        # Codex 0.125-0.159: "Exit code: N\nWall time: ...\n[Total output lines: N\n]Output:\n<text>"
+        body = raw.split('\nOutput:\n', 1)
+        return int(match[1]), body[1] if len(body) == 2 else raw[match.end():], 'completed'
+    if raw.lstrip().startswith('execution error:'):
+        # The sandbox refused to start the command: not a result in either direction.
+        return None, raw, 'not_executed'
+    return None
 
 
 def parse(path):
@@ -59,7 +87,8 @@ def parse(path):
                     emit('tool_call', str(command), 'command', iid)
                     emit('tool_result', str(item.get('aggregated_output', item.get('stdout', ''))) +
                          '\n' + str(item.get('stderr', '')), 'command', iid,
-                         exit_code=code, is_error=code != 0 if code is not None else None, status=status)
+                         exit_code=code, exit_source='explicit' if code is not None else None,
+                         is_error=code != 0 if code is not None else None, status=status)
                 elif typ == 'FileChange':
                     actions = []
                     changes = item.get('changes', {})
@@ -107,17 +136,14 @@ def parse(path):
             elif typ in ('function_call_output', 'custom_tool_call_output'):
                 if iid not in fallback_ids:
                     continue
-                try:
-                    data = json.loads(payload.get('output', ''))
-                    if not isinstance(data, dict):
-                        raise ValueError()
-                    code = data.get('exit_code')
-                    emit('tool_result', str(data.get('output', '')), 'command', iid,
-                         exit_code=code if type(code) is int else None,
-                         status='completed' if type(code) is int else 'unknown',
-                         is_error=code != 0 if type(code) is int else None)
-                except (ValueError, TypeError):
+                decoded = decode_output(payload.get('output', ''))
+                if decoded is None:
                     diagnostics.append(Diagnostic('unsupported_result', number, t('diag_unsupported_result')))
+                    continue
+                code, text, status = decoded
+                emit('tool_result', text, 'command', iid, exit_code=code,
+                     exit_source='explicit' if code is not None else None, status=status,
+                     is_error=code != 0 if code is not None else None)
             elif typ == 'message' and payload.get('role') == 'assistant':
                 text = text_content(payload.get('content', []))
                 if (turn,text) not in finals:

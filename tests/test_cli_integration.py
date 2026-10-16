@@ -2,6 +2,7 @@ import csv
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -67,6 +68,37 @@ class IntegrationTests(unittest.TestCase):
             self.assertIn('CONFIRMED',content)
             self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(),before)
             self.assertEqual(path.stat().st_mtime_ns,mtime)
+
+    def test_codex_text_fixture_end_to_end(self):
+        from receipts import report
+        path=Path(__file__).resolve().parent/'fixtures'/'codex-text-output.jsonl'
+        with tempfile.TemporaryDirectory() as d,patch.object(report,'REPORTS_DIR',Path(d)):
+            with redirect_stdout(io.StringIO()):
+                self.assertEqual(main(['audit',str(path)]),0)
+
+    def test_nonfatal_diagnostic_does_not_force_exit_2(self):
+        from receipts import report
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);path=root/'s.jsonl';fixture(path)
+            with path.open('a',encoding='utf-8') as f:
+                f.write('\n{"type":"response_item","payload":{"type":"function_call","name":"exec_command","call_id":"q","arguments":"{\\"cmd\\":\\"ls\\"}"}}')
+                f.write('\n{"type":"response_item","payload":{"type":"function_call_output","call_id":"q","output":"???"}}')
+            with patch.object(report,'REPORTS_DIR',root/'r'),redirect_stdout(io.StringIO()):
+                self.assertEqual(main(['audit',str(path)]),0)
+
+    def test_unknown_file_in_discovery_is_skipped(self):
+        from receipts import report
+        with tempfile.TemporaryDirectory() as d:
+            home=Path(d)
+            good=home/'.codex/sessions/2026/10/16/s.jsonl';good.parent.mkdir(parents=True);fixture(good)
+            junk=home/'.claude/projects/p/summary.jsonl';junk.parent.mkdir(parents=True)
+            junk.write_text('{"type":"summary","summary":"x"}\n',encoding='utf-8')
+            env={'CODEX_HOME':str(home/'.codex'),'CLAUDE_CONFIG_DIR':str(home/'.claude')}
+            with patch('pathlib.Path.home',return_value=home),patch.dict(os.environ,env), \
+                    patch.object(report,'REPORTS_DIR',home/'r'),redirect_stdout(io.StringIO()):
+                self.assertEqual(main(['audit','--since','1d','--lang','en']),0)
+            text=''.join(p.read_text(encoding='utf-8') for p in (home/'r').glob('*.md'))
+            self.assertIn('Skipped 1 files',text)
 
     def test_malformed_not_clean(self):
         with tempfile.TemporaryDirectory() as d:

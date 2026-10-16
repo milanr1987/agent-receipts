@@ -44,6 +44,33 @@ class CodexTests(unittest.TestCase):
             {'type':'response_item','payload':{'type':'function_call_output','call_id':'x','output':'{"exit_code":0,"output":"2 passed"}'}}])
         self.assertTrue(any(e.kind=='tool_result' and e.exit_code==0 for e in s.events))
 
+    def call_and_output(self, output):
+        return parse_rows(codex.parse, [
+            {'type':'turn_context','payload':{'turn_id':'t','cwd':'/x'}},
+            {'type':'response_item','payload':{'type':'function_call','name':'shell_command','call_id':'z','arguments':'{"command":"pytest"}'}},
+            {'type':'response_item','payload':{'type':'function_call_output','call_id':'z','output':output}}])
+
+    def test_text_output_format(self):
+        s=self.call_and_output('Exit code: 0\nWall time: 1.2 seconds\nOutput:\n2 passed\n')
+        r=s.events[-1]
+        self.assertEqual((r.exit_code,r.exit_source,r.status),(0,'explicit','completed'))
+        self.assertIn('2 passed',r.text);self.assertNotIn('Wall time',r.text)
+        self.assertEqual(s.diagnostics,())
+
+    def test_list_output_format(self):
+        s=self.call_and_output([{'type':'input_text','text':'Exit code: 1\nWall time: 0.5 seconds\nOutput:\n1 failed'}])
+        self.assertEqual((s.events[-1].exit_code,s.events[-1].is_error),(1,True))
+
+    def test_execution_error_is_not_executed(self):
+        s=self.call_and_output('execution error: Io(Custom { kind: Other, error: "sandbox" })')
+        r=s.events[-1]
+        self.assertEqual((r.exit_code,r.status,r.is_error),(None,'not_executed',None))
+        self.assertEqual(s.diagnostics,())
+
+    def test_unknown_text_still_diagnosed(self):
+        s=self.call_and_output('something else entirely')
+        self.assertEqual([d.code for d in s.diagnostics],['unsupported_result'])
+
     def test_unrelated_mcp_result_not_command_diagnostic(self):
         s=parse_rows(codex.parse,[completed({'type':'AgentMessage','id':'m','content':[]}),
             {'type':'response_item','payload':{'type':'function_call','name':'web_search','call_id':'w','arguments':'{}'}},
