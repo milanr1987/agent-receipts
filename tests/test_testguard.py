@@ -62,6 +62,28 @@ class GitTests(unittest.TestCase):
             self.assertEqual(subprocess.run([self.git,'-C',str(root),*args],capture_output=True).returncode,0)
         return root,p
 
+    def test_include_filter_skips_git_reads_for_other_files(self):
+        import receipts.git_read as git_read
+        with tempfile.TemporaryDirectory() as d:
+            root,p=self.make_repo(d)
+            names=['test_a.py','test_b.py','test_c.py']
+            for n in names:
+                (root/n).write_text('def test_x():\n assert 1\n assert 2\n')
+            subprocess.run([self.git,'-C',str(root),'add','.'],capture_output=True)
+            subprocess.run([self.git,'-C',str(root),'commit','-m','more'],capture_output=True)
+            for n in names:
+                (root/n).write_text('def test_x():\n assert 1\n')
+            shows=[]
+            real=git_read.run_git
+            def spy(r,args,*a,**k):
+                if args and args[0]=='show':
+                    shows.append(args[-1])
+                return real(r,args,*a,**k)
+            with patch.object(git_read,'run_git',spy):
+                versions=changed_versions(root,include=lambda rel: rel=='test_b.py')
+            self.assertEqual({v.path for v in versions},{'test_b.py'})
+            self.assertTrue(shows and all(s.endswith(':test_b.py') for s in shows),shows)
+
     def test_staged_unstaged_and_index_unchanged(self):
         with tempfile.TemporaryDirectory() as d:
             root,p=self.make_repo(d)

@@ -45,7 +45,7 @@ def repo_root(root):
     return root
 
 
-def changed_versions(root, base='HEAD'):
+def changed_versions(root, base='HEAD', include=None):
     root = repo_root(root)
     if not re.fullmatch(r'(?:HEAD(?:[~^]\d*)?|[A-Za-z0-9][A-Za-z0-9_./-]*)', base) or '..' in base:
         raise ValueError(t('git_bad_base'))
@@ -63,7 +63,7 @@ def changed_versions(root, base='HEAD'):
     versions = []
     for rel in paths:
         from .testguard import is_test
-        if not is_test(rel):
+        if not is_test(rel) or (include is not None and not include(rel)):
             continue
         path = root / rel
         try:

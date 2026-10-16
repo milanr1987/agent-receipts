@@ -115,7 +115,7 @@ def handle_hook(source, payload):
                 from .git_read import changed_versions, repo_root
                 from .testguard import compare_versions
                 top = repo_root(project)
-                findings = [f for version in changed_versions(project) if _was_touched(version.path, top, touched)
+                findings = [f for version in changed_versions(project, include=lambda rel: _was_touched(rel, top, touched))
                             for f in compare_versions(version.path, version.old, version.new)]
                 if findings:
                     warnings.append(t('hook_weakening', n=len(findings)))
